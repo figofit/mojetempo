@@ -24,10 +24,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test domain rules and safe packaging
-        run: node --test tests/*.test.mjs
       - name: Install pinned local Worker test runtime
         run: npm ci --no-audit --no-fund
+      - name: Test domain rules and safe packaging
+        run: node --test tests/*.test.mjs
       - name: Build public application only
         run: python3 scripts/build_site.py
       - name: Install browser test tools
@@ -86,6 +86,18 @@ jobs:
           cat "$RUNNER_TEMP/tempo-cloud-smoke.jsonl"
           python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-cloud-smoke.jsonl" --name "Accounts D1 and maps" --exit-code "$tempo_test_status" || true
           exit "$tempo_test_status"
+      - name: Test the Pages runtime with D1 and two devices
+        shell: bash
+        env:
+          TEMPO_RUNTIME: pages
+        run: |
+          set +e
+          python3 tests/cloud_smoke.py > "$RUNNER_TEMP/tempo-pages-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-pages-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-pages-smoke.jsonl" --name "Pages D1 and two devices" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
       - name: Retain smoke-test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -96,6 +108,7 @@ jobs:
             ${{ runner.temp }}/tempo-browser-smoke.jsonl
             ${{ runner.temp }}/tempo-pwa-smoke.jsonl
             ${{ runner.temp }}/tempo-cloud-smoke.jsonl
+            ${{ runner.temp }}/tempo-pages-smoke.jsonl
             ${{ runner.temp }}/tempo-server.log
             ${{ runner.temp }}/tempo-browser-artifacts/
       - name: Upload tested public assets
@@ -159,6 +172,10 @@ jobs:
   verify-cloudflare:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        hostname: [figofit-mojetempo.pages.dev, moje.itfit.cz]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -170,13 +187,13 @@ jobs:
           python3 -m playwright install --with-deps chromium
       - name: Wait for Cloudflare deployment in a real browser
         env:
-          TEMPO_BASE_URL: https://moje.itfit.cz/
+          TEMPO_BASE_URL: https://${{ matrix.hostname }}/
           TEMPO_REQUIRE_DATABASE: '1'
         run: python3 scripts/verify_ready.py
       - name: Verify actual published Cloudflare application
         shell: bash
         env:
-          TEMPO_BASE_URL: https://moje.itfit.cz/
+          TEMPO_BASE_URL: https://${{ matrix.hostname }}/
           TEMPO_ARTIFACTS_DIR: ${{ runner.temp }}/tempo-live-browser-artifacts
         run: |
           set +e
@@ -190,7 +207,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloudflare-site-verification-diagnostics
+          name: cloudflare-site-verification-${{ matrix.hostname }}
           retention-days: 7
           path: |
             ${{ runner.temp }}/tempo-live-browser-smoke.jsonl

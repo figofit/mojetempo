@@ -20,6 +20,34 @@ export const MODULES = Object.freeze([
   { id: 'chronicle', label: 'Kronika', description: 'Fotky, poznámky a momenty na tvé cestě.' },
 ]);
 
+export const WORKOUT_FOCUSES = Object.freeze([
+  {id:'unspecified',label:'Bez určení'}, {id:'fullbody',label:'Celé tělo / full body'},
+  {id:'upper',label:'Vršek těla'}, {id:'lower',label:'Spodek těla'},
+  {id:'push',label:'Push – tlaky'}, {id:'pull',label:'Pull – tahy'},
+  {id:'legs',label:'Legs – nohy'}, {id:'custom',label:'Vlastní split'},
+]);
+export const MOVEMENT_PATTERNS = Object.freeze([
+  {id:'squat',label:'Dřep / pohyb přes kolena',short:'Dřep',group:'squat'},
+  {id:'hinge',label:'Hinge / pohyb přes kyčle',short:'Hinge',group:'hinge'},
+  {id:'horizontal_push',label:'Vodorovný tlak – např. bench, klik',short:'Tlak vodorovně',group:'push'},
+  {id:'horizontal_pull',label:'Vodorovný tah – např. přítahy',short:'Tah vodorovně',group:'pull'},
+  {id:'vertical_push',label:'Svislý tlak – nad hlavu',short:'Tlak svisle',group:'push'},
+  {id:'vertical_pull',label:'Svislý tah – např. shyb, kladka',short:'Tah svisle',group:'pull'},
+  {id:'core',label:'Střed těla / stabilizace',short:'Střed těla',group:'core'},
+  {id:'carry',label:'Nošení / carry',short:'Nošení',group:'carry'},
+  {id:'other',label:'Jiný / izolovaný cvik',short:'Ostatní',group:'other'},
+]);
+
+export function strengthTargets(input={}) {
+  const output={};
+  for(const key of ['strengthPullPerPush','strengthHingePerSquat']) {
+    const value=input?.[key]===undefined?1:Number(input[key]);
+    if(!Number.isFinite(value)||value<0.25||value>4||!Number.isInteger(value*4))throw new Error('Cílový poměr musí být od 0,25 do 4 v krocích po 0,25.');
+    output[key]=value;
+  }
+  return output;
+}
+
 export const DEFAULT_SETTINGS = Object.freeze({
   name: 'Moje tempo',
   modules: Object.freeze(MODULES.map((module) => module.id)),
@@ -27,6 +55,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   weeklySessions: 3,
   weeklyRecovery: 2,
   dailySteps: 8000,
+  strengthPullPerPush: 1,
+  strengthHingePerSquat: 1,
 });
 
 const typeById = new Map(ACTIVITY_TYPES.map((type) => [type.id, type]));
@@ -98,6 +128,21 @@ export function validateEntry(input, today = localDate()) {
     if (!place || typeof place.name !== 'string' || !place.name.trim() || place.name.length > 200 || typeof place.latitude !== 'number' || !Number.isFinite(place.latitude) || Math.abs(place.latitude)>90 || typeof place.longitude !== 'number' || !Number.isFinite(place.longitude) || Math.abs(place.longitude)>180) errors.push('Místo potřebuje název a platné souřadnice.');
     else location={name:place.name.trim(),latitude:place.latitude,longitude:place.longitude};
   }
+  let workout;
+  if(input.workout!=null) {
+    const w=input.workout;
+    if(!['strength','home'].includes(input.type)||!w||typeof w!=='object'||!WORKOUT_FOCUSES.some(f=>f.id===w.focus)||!Array.isArray(w.exercises)||w.exercises.length>50) errors.push('Silový trénink potřebuje platné zaměření a nejvýše 50 cviků.');
+    else {
+      const splitName=typeof w.splitName==='string'?w.splitName.trim():'';
+      if(splitName.length>80||w.focus==='custom'&&!splitName)errors.push('Vlastní split pojmenuj nejvýše 80 znaky.');
+      const exercises=[];
+      for(const exercise of w.exercises) {
+        if(!exercise||!MOVEMENT_PATTERNS.some(p=>p.id===exercise.pattern)||!Number.isInteger(exercise.sets)||exercise.sets<1||exercise.sets>50||exercise.name!=null&&typeof exercise.name!=='string'||typeof exercise.name==='string'&&exercise.name.trim().length>100) {errors.push('U každého cviku vyber pohybový vzor, 1 až 50 pracovních sérií a název do 100 znaků.');continue;}
+        exercises.push({pattern:exercise.pattern,sets:exercise.sets,name:(exercise.name||'').trim()});
+      }
+      workout={focus:w.focus,splitName:w.focus==='custom'?splitName:'',exercises};
+    }
+  }
 
   const entry = {
     id: typeof input.id === 'string' && input.id ? input.id : makeId(),
@@ -114,7 +159,36 @@ export function validateEntry(input, today = localDate()) {
   };
   if (typeof input.photoId === 'string' && input.photoId) entry.photoId = input.photoId;
   if (location) entry.location = location;
+  if (workout) entry.workout = workout;
   return { valid: errors.length === 0, errors, entry };
+}
+
+/** Report recorded working sets, never infer exercises from a split label or minutes. */
+export function computeStrengthStats(entries=[],settings=DEFAULT_SETTINGS,date=new Date(),period='week') {
+  const today=localDate(date),current=parseDate(today);
+  const start=localDate(addDays(current,period==='28days'?-27:-((current.getDay()+6)%7)));
+  const sessions=entries.filter(entry=>entry&&parseDate(entry.date)&&entry.date>=start&&entry.date<=today&&(entry.type==='strength'||entry.type==='home'&&entry.workout));
+  const patterns=MOVEMENT_PATTERNS.map(pattern=>({...pattern,sets:0}));
+  const byId=new Map(patterns.map(pattern=>[pattern.id,pattern]));
+  let detailedSessions=0;
+  const focuses=new Map();
+  for(const entry of sessions) {
+    const workout=entry.workout;
+    if(workout) {
+      const focus=WORKOUT_FOCUSES.find(f=>f.id===workout.focus);
+      if(focus){const label=workout.focus==='custom'?workout.splitName||focus.label:focus.label;focuses.set(label,(focuses.get(label)||0)+1);}
+    }
+    let detailed=false;
+    for(const exercise of workout?.exercises||[]) {
+      const pattern=byId.get(exercise.pattern);
+      if(pattern&&Number.isInteger(exercise.sets)&&exercise.sets>=1&&exercise.sets<=50){pattern.sets+=exercise.sets;detailed=true;}
+    }
+    if(detailed)detailedSessions++;
+  }
+  const groups=Object.fromEntries(['squat','hinge','push','pull','core','carry','other'].map(group=>[group,patterns.filter(p=>p.group===group).reduce((sum,p)=>sum+p.sets,0)]));
+  const targets=strengthTargets(settings);
+  const ratio=(numerator,denominator,target)=>({numerator,denominator,target,value:denominator?numerator/denominator:null,status:!numerator&&!denominator?'empty':!denominator?'high':numerator/denominator<target*0.8?'low':numerator/denominator>target*1.2?'high':'within'});
+  return {start,end:today,sessions:sessions.length,detailedSessions,unknownSessions:sessions.length-detailedSessions,patterns,groups,totalSets:patterns.reduce((sum,p)=>sum+p.sets,0),focuses:[...focuses].map(([label,count])=>({label,count})),pullPush:ratio(groups.pull,groups.push,targets.strengthPullPerPush),hingeSquat:ratio(groups.hinge,groups.squat,targets.strengthHingePerSquat)};
 }
 
 /**
@@ -203,9 +277,17 @@ function csvCell(value) {
 }
 
 export function exportCSV(entries = []) {
-  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka']];
-  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '']);
+  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka', 'Zaměření tréninku', 'Cviky a pracovní série']];
+  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '',workoutLabel(entry.workout),workoutExercises(entry.workout)]);
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(';')).join('\r\n')}\r\n`;
+}
+
+export function workoutLabel(workout) {
+  if(!workout)return '';
+  return workout.focus==='custom'?workout.splitName:WORKOUT_FOCUSES.find(focus=>focus.id===workout.focus)?.label||'';
+}
+function workoutExercises(workout) {
+  return (workout?.exercises||[]).map(exercise=>`${exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik'} (${MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'ostatní'}): ${exercise.sets} sérií`).join('\n');
 }
 
 function icalEscape(value) {
@@ -238,7 +320,7 @@ export function exportICS(entries = []) {
   for (const entry of entries) {
     const day = parseDate(entry.date);
     if (!day) continue;
-    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', entry.note].filter(Boolean).join('\n');
+    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', workoutLabel(entry.workout),workoutExercises(entry.workout),entry.note].filter(Boolean).join('\n');
     lines.push(
       'BEGIN:VEVENT',
       `UID:${encodeURIComponent(String(entry.id || `${entry.date}-${entry.type}`))}@mojetempo.local`,
@@ -275,5 +357,5 @@ export function createDemoEntries(date = new Date()) {
     { days: 12, type: 'cardio', duration: 30, steps: 3800, mood: 4, title: 'Pravidelně po svém', note: 'Ukázkový záznam pohybu.' },
     { days: 15, type: 'walking', duration: 40, steps: 7000, mood: 4, title: 'První zápis', note: 'Ukázková data slouží jen k prohlédnutí přehledu.' },
   ];
-  return samples.map(({ days, ...entry }, index) => ({ ...entry, id: `demo-${index}`, date: localDate(addDays(today, -days)), createdAt: addDays(today, -days).toISOString() }));
+  return samples.map(({ days, ...entry }, index) => ({ ...entry,...(entry.type==='strength'?{workout:{focus:days===0?'fullbody':'upper',splitName:'',exercises:(days===0?['squat','hinge','horizontal_push','horizontal_pull']:['horizontal_push','horizontal_pull']).map(pattern=>({pattern,name:'',sets:3}))}}:{}), id: `demo-${index}`, date: localDate(addDays(today, -days)), createdAt: addDays(today, -days).toISOString() }));
 }

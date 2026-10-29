@@ -1,35 +1,46 @@
 # Moje tempo na moje.itfit.cz
 
-Samostatná aplikace Moje tempo. Nepřipojuje se k účtům ani databázi trenérské aplikace.
+Moje tempo je samostatná aplikace se samostatnou databází. Nemění databázi, domény ani přístupy trenérské aplikace nebo Oldy. DNS domény `itfit.cz` zůstává u současného registrátora.
 
-## Automatické nasazení
+## Nasazení pro externí DNS
 
-`wrangler.toml` deklaruje vlastní doménu **moje.itfit.cz** pomocí `custom_domain = true` i samostatnou databázi **mojetempo-db**. Push do `main` spouští propojené Cloudflare Workers Builds. Při dostatečných oprávněních tokenu Wrangler vytvoří databázi a připojí doménu s DNS a HTTPS automaticky. Zóna `itfit.cz` musí být aktivní ve stejném Cloudflare účtu. GitHub Actions následně ověřují novou doménu, dostupnost D1 a inicializaci účtů; samotný úspěch místních testů není potvrzením produkčního nasazení.
+Cílový projekt Cloudflare Pages je **figofit-mojetempo**. Jeho úspěšné vytvoření a nasazení je nutné ověřit před přidáním CNAME; samotný název v repozitáři nepotvrzuje existenci projektu ani vlastnictví cílové adresy.
 
-## Ruční dokončení, pokud nasazení zastaví chybějící oprávnění
+Existující **Workers Builds → mojetempo** dál sleduje GitHub `figofit/mojetempo`, větev `main`. Příkazy zůstávají `python3 scripts/build_site.py` a `npx wrangler deploy`. Druhý příkaz spustí deklarovaný build hook `node scripts/cloudflare_build.mjs`. Ten:
 
-1. Otevři **Workers & Pages → mojetempo → Settings → Domains & Routes → Add → Custom Domain** a zadej **moje.itfit.cz**. Cloudflare připraví DNS a HTTPS, pokud je `itfit.cz` aktivní zónou ve stejném účtu. Pokud zóna v účtu není, průvodce nejdříve vyžádá její připojení. Pouhý DNS CNAME na Workers.dev nenahrazuje připojení Custom Domain k Workeru.
-2. V **Deployments** ověř úspěšné nasazení změn z `main`. Projekt používá `python3 scripts/build_site.py` a `npx wrangler deploy`. Wrangler 4.155.0 je připnutý v `package-lock.json` a při oprávněném prvním nasazení vytvoří databázi **mojetempo-db**, binding **DB**. Další nasazení znovu používají existující binding.
-3. Pokud build token nemá právo databázi vytvořit, založ **Storage & Databases → D1 → Create database → mojetempo-db**. U Workeru v **Bindings → Add → D1 database** připoj tuto databázi pod názvem **DB** a zopakuj nasazení. Pro automatické vytvoření/správu databáze potřebuje build token oprávnění **Account → D1 → Edit**. Existující databázi trenéra nepoužívej. Pokud máš k dispozici ID nové databáze, lze jej uložit jako `database_id` do stávající sekce `[[d1_databases]]`; ID není heslo.
+1. Sestaví veřejné soubory. V běžném místním prostředí ani v testech žádné účty Cloudflare nekontaktuje.
+2. Pouze uvnitř Workers Builds (`WORKERS_CI=1`) používá bezpečně předané `CLOUDFLARE_ACCOUNT_ID` a `CLOUDFLARE_API_TOKEN`.
+3. Vytvoří nebo znovu použije vyhrazenou D1 **mojetempo-db** a projekt Pages **figofit-mojetempo**. API volání se týkají pouze těchto prostředků.
+4. Do dočasného adresáře připraví veřejné soubory a přibalený `_worker.js`, který obsluhuje `/api/*`. Serverový kód se nikdy nepřidává do `dist` zveřejňovaného jako statický web. Pages se nasadí s bindingem **DB**.
+5. U Pages zaregistruje vlastní doménu **moje.itfit.cz**. Nameservery ani DNS ostatních subdomén nemění. Nakonec běžné nasazení zachová i původní Worker na jeho Workers.dev adrese.
 
-Tabulky se bezpečně vytvoří při prvním požadavku na účty z přibaleného `migrations/0001_accounts.sql`. Migrace pouze vytváří vlastní tabulky, žádná existující data nemaže. Před případnými budoucími změnami schématu vytvoř D1 export; obnova z Time Travel není v produkci tímto kódem ověřená.
+Nasazovací token potřebuje vedle současných práv také **Account → Cloudflare Pages → Edit** a **Account → D1 → Edit**. Automaticky vytvořený token Workers Builds je nemusí obsahovat. Při HTTP 403 nebo chybě přístupů se nasazení zastaví a vypíše konkrétní API operaci a kód chyby, nikdy token. Oprávnění lze doplnit v Cloudflare **My Profile → API Tokens → příslušný build token → Edit** a nasazení opakovat. Hodnoty tokenů nepatří do repozitáře ani chatu.
 
-Bez přístupu k tvému Cloudflare účtu nelze z vývojového prostředí potvrdit aktivaci DNS, oprávnění tokenu ani připojení produkční D1. Připravený kód a místní testy tyto kroky nenahrazují.
+`npm run build` a `npm run build:pages` jsou čistě místní sestavení a nevytvářejí vzdálené prostředky. `npm run build:pages` vypíše cestu k připravenému dočasnému adresáři pro Pages. Vývoj používá `npm run dev` a samostatné prostředí `local`.
 
-## Ověření spuštění
+## CNAME u registrátora
 
-- `https://moje.itfit.cz/` otevře Moje tempo a v **Cíle a nastavení** nabízí účet.
-- `https://moje.itfit.cz/api/status` vrátí `{"available":true}` a `/api/session` bez přihlášení `{"user":null}`.
-- Vytvoř vlastní účet a ulož jednorázově zobrazený obnovovací klíč. E-mail zatím slouží jako přihlašovací jméno, jeho vlastnictví se neověřuje a obnovovací zprávy se neposílají.
-- Zapiš aktivitu s místem a fotkou, počkej na **Uloženo v účtu**. V jiném prohlížeči/telefonu se přihlas stejným účtem a ověř zápis i fotku. Na otevřeném druhém zařízení se změny načítají při návratu do aplikace, tlačítkem **Synchronizovat** nebo přibližně každých 30 sekund. Rozepsaný formulář se automaticky nepřekresluje.
-- Změny na GitHubu v `main` dále spouštějí Cloudflare Workers Builds. Změna DNS se kvůli úpravám aplikace neopakuje.
+Až je potvrzené nasazení vlastního projektu **figofit-mojetempo** a v Pages připojená doména **moje.itfit.cz**, přidej nebo uprav pouze záznam pro `moje`:
+
+| Pole | Hodnota |
+| --- | --- |
+| Typ | CNAME |
+| Název / host | `moje` |
+| Cíl | `figofit-mojetempo.pages.dev` |
+| TTL | výchozí hodnota registrátora |
+
+Cíl je bez `https://` a bez lomítka; některá rozhraní vyžadují závěrečnou tečku. U tohoto hostu nesmí současně existovat konfliktní A/AAAA záznam. Ostatní záznamy domény zachovej. Cloudflare po ověření CNAME připraví HTTPS; to může trvat několik minut. Workers.dev adresa není pro tento způsob zapojení cílem CNAME.
+
+## Ověření
+
+- `https://figofit-mojetempo.pages.dev/` musí zobrazit Moje tempo. Na `/api/status` očekávej `{"available":true}` a na `/api/session` bez přihlášení `{"user":null}`.
+- Po změně DNS musí stejné kontroly projít na `https://moje.itfit.cz/`. GitHub Actions kontrolují obě adresy samostatně. Chybějící CNAME nebo nehotový certifikát se nesmí obejít vypnutím ověřování HTTPS.
+- Při prvním požadavku se v nové D1 vytvoří vlastní tabulky z `migrations/0001_accounts.sql`. Existující tabulky ani záznamy se nemažou.
+- Vytvoř účet a ulož zobrazený obnovovací klíč. Na jiném zařízení se přihlas stejným e-mailem a heslem a ověř zápis i fotku. E-mail slouží jako přihlašovací jméno; ověřovací ani obnovovací zprávy se zatím neposílají.
+- Na otevřeném druhém zařízení se změny načítají při návratu do aplikace, tlačítkem **Synchronizovat** nebo přibližně každých 30 sekund. Rozepsané formuláře se nepřekreslují.
 
 ## Přenos současného deníku
 
-Na dosavadní adrese `https://mojetempo.m-dokoupil69.workers.dev/` nejdříve otevři **Cíle a nastavení → Stáhnout celou zálohu**. Na nové doméně se přihlas a vyber **Obnovit ze zálohy**. Obnova nahradí současný deník přihlášeného účtu; aplikace předem požádá o potvrzení. Záznamy i fotky na staré adrese zůstanou zachované.
+Na dosavadní adrese `https://mojetempo.m-dokoupil69.workers.dev/` otevři **Cíle a nastavení → Stáhnout celou zálohu**. Na nové doméně se přihlas a zvol **Obnovit ze zálohy**. Obnova po potvrzení nahradí současný deník otevřeného účtu; původní místní záznamy na staré adrese zůstanou zachované. Záloha zahrnuje také místa, cviky, pracovní série, vlastní split a cílové poměry.
 
-Pokud máš místní deník přímo na nové adrese, po přihlášení ho lze výslovně přidat tlačítkem **Převést místní deník do účtu**. Opakované převedení by vytvořilo další kopie.
-
-## Co je ověřeno místně
-
-`node --test tests/*.test.mjs`, `python3 tests/browser_smoke.py`, `python3 tests/pwa_smoke.py` a `python3 tests/cloud_smoke.py` pokrývají doménová pravidla, bezpečné balení, původní deník, offline aktualizace, skutečný místní Worker + D1, dvě zařízení, přesné bajty fotografií, souběžné změny, oddělení účtů, obnovu hesla, výšlapy a mapové body. Hledání a dlaždice mapy jsou v testu nahrazené, aby test neposílal lokace veřejným službám; dostupnost těchto služeb test neslibuje.
+Místní testy ověřují skutečný Worker i Pages s D1, dvě zařízení, offline fronty, přesné bajty fotografií, souběžné změny, oddělení účtů, obnovu hesla, mapové body a silové statistiky. Vyhledávání míst a mapové dlaždice jsou v testech nahrazené. Úspěch místních testů nepotvrzuje přístupová oprávnění produkčního tokenu, existenci projektu ani propagaci DNS.

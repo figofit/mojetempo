@@ -1,5 +1,5 @@
 import schema from '../migrations/0001_accounts.sql';
-import { DEFAULT_SETTINGS, MODULES, validateEntry } from '../domain.mjs';
+import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets } from '../domain.mjs';
 import { emptyDiary } from '../sync-rules.mjs';
 
 const enc=new TextEncoder();
@@ -74,6 +74,7 @@ function validateState(input) {
   if(!input||input.version!==1||!Array.isArray(input.entries)||input.entries.length>10000||!input.settings)fail(400,'Neplatný formát deníku.');
   const settings={...DEFAULT_SETTINGS},limits={weeklyMinutes:10080,weeklySessions:100,weeklyRecovery:100,dailySteps:200000};
   for(const [key,max] of Object.entries(limits)){const value=input.settings[key];if(!Number.isInteger(value)||value<1||value>max)fail(400,'Neplatný cíl.');settings[key]=value;}
+  try {Object.assign(settings,strengthTargets(input.settings));}catch(error){fail(400,error.message);}
   if(!Array.isArray(input.settings.modules)||input.settings.modules.some(id=>!MODULES.some(m=>m.id===id)))fail(400,'Neplatné moduly.');
   settings.modules=[...new Set(input.settings.modules)];
   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());

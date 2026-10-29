@@ -11,6 +11,7 @@ První verze slouží k ověření každodenního používání. Navazuje na zá
 - Zápis aktivit s datem, délkou, kroky, poznámkou a pocitem po aktivitě.
 - Výšlapy a turistiku, vzdálenost a nastoupané metry ve statistikách i exportech.
 - Volitelné místo u libovolného zápisu včetně procházky nebo osobního momentu. Vyhledání místa, aktuální polohu nebo ruční souřadnice. Menší mapka **Moje místa** je dole ve statistikách; zobrazuje body, nikoliv GPS trasy.
+- Silové tréninky: celé tělo, vršek, spodek, push/pull/legs nebo vlastní split. Konkrétní cviky nebo pohybové vzory, pracovní série, týdenní i 28denní přehled a nastavitelné poměry tahů/tlaků a hinge/dřepů. Nevyplněné tréninky se do objemu neodhadují.
 - Účty v samostatné Cloudflare D1: synchronizaci zápisů, nastavení, míst a fotografií mezi zařízeními, místní offline frontu a ochranu před přepsáním souběžných změn.
 - Samostatný zápis kroků i osobního momentu do kroniky bez povinných minut nebo tréninku.
 - Přehled týdenního pohybu, regenerace a plnění vlastních cílů.
@@ -58,6 +59,7 @@ V připraveném cloudovém prostředí je dostupný Playwright a Chromium. Prvn�
 python3 tests/browser_smoke.py
 python3 tests/pwa_smoke.py
 python3 tests/cloud_smoke.py
+TEMPO_RUNTIME=pages python3 tests/cloud_smoke.py
 ```
 
 Testy používají izolovaný prohlížeč a dočasná data. Pro jiný server nastav `TEMPO_BASE_URL`, pro jiný Chromium `TEMPO_CHROMIUM`. Playwright je vývojový nástroj; aplikace samotná ho nepotřebuje.
@@ -74,7 +76,7 @@ Aplikace je zveřejněná na **https://figofit.github.io/mojetempo/**. Nasazení
 
 V repozitáři na GitHubu nastav **Settings → Pages → Source → GitHub Actions**. Workflow `.github/workflows/pages.yml` po odeslání změn do větve `main` nebo ručním spuštění provede Node testy, sestavení, prohlížečové kontroly zabalené aplikace a `pwa_smoke.py`. Teprve po jejich úspěchu nasadí veřejné soubory do GitHub Pages. Výsledek ověř v běhu Actions a na cílové adrese. Publikování vývojového cloudového prostředí je samostatný krok a web na GitHub Pages nenasazuje.
 
-## Cloudflare Workers: automatické nasazení
+## Cloudflare Pages a existující automatické nasazení
 
 Projekt `mojetempo` na Cloudflare používá Workers Builds propojené s repozitářem `figofit/mojetempo`. Konfigurace `wrangler.toml` publikuje hotové soubory přes Workers Static Assets a `/api/*` obsluhuje `worker/index.mjs` s bindingem `DB` na samostatnou D1. Schéma je přibalené ze složky `migrations`.
 
@@ -87,7 +89,9 @@ Nastavení sestavení:
 
 Cloudflare po odeslání změn do `main` sestaví `dist` a zveřejní ho do existujícího Workeru `mojetempo`. Konfigurace zapíná adresu Workers.dev; skutečnou adresu převezmi z úspěšného nasazení v Cloudflare v části Domains. Nasazení není potvrzené, dokud build a deploy neskončí úspěšně a aplikace neprojde kontrolou na výsledné adrese.
 
-Cloudflare pro nasazení v prostředí Workers Builds používá svůj build token; automatické vytvoření D1 navíc vyžaduje oprávnění D1 Edit. Konfigurace deklaruje doménu **moje.itfit.cz** jako **Custom Domain**, takže ji oprávněné nasazení připojí automaticky. Podmínky a případné ruční dokončení popisuje [DEPLOYMENT.md](DEPLOYMENT.md). Pro přímé nasazení z vývojového prostředí je potřeba bezpečně připojený účet, odpovídající API oprávnění a povolená síť k `api.cloudflare.com`. Přihlašovací údaje nepatří do repozitáře ani do chatu.
+Pro subdoménu s DNS u registrátora se stejná aplikace nasazuje také na Cloudflare Pages jako projekt **figofit-mojetempo**. Existující Workers Builds po pushi využijí `scripts/cloudflare_build.mjs` k vytvoření Pages a samostatné D1, nasazení přibaleného API a připojení vlastní domény. Vnější DNS potřebuje CNAME `moje` na potvrzenou adresu vytvořeného projektu Pages. Nameservery domény se nemění.
+
+Nasazovací token vyžaduje **Cloudflare Pages Edit** a **D1 Edit**. Běžné místní sestavení vzdálené prostředky nevytváří. Podmínky, skutečné ověření cíle a přesný postup popisuje [DEPLOYMENT.md](DEPLOYMENT.md). Přihlašovací údaje nepatří do repozitáře ani do chatu.
 
 V připraveném vývojovém prostředí je CLI `/workspace/tools/cloudflare/node_modules/.bin/wrangler` verze 4.155.0. Sestavení a konfiguraci lze ověřit bez přihlášení:
 

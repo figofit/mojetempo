@@ -28,8 +28,18 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
     if not Path(executable).is_file() and Path('/workspace/tools/cloudflare/node_modules/.bin/wrangler').is_file():executable='/workspace/tools/cloudflare/node_modules/.bin/wrangler'
     command=[executable] if Path(executable).is_file() else ['npx','--yes','wrangler@4.155.0']
     environment={**os.environ,'WRANGLER_SEND_METRICS':'false','XDG_CONFIG_HOME':str(Path(temporary)/'config')}
+    runtime=os.environ.get('TEMPO_RUNTIME','worker')
+    stage=None
+    working_directory=ROOT
+    arguments=['dev','--env','local','--local','--ip','127.0.0.1','--port',str(port),'--persist-to',str(Path(temporary)/'db')]
+    if runtime=='pages':
+        packaged=subprocess.run(['node','--input-type=module','-e','import {preparePages} from "./scripts/build_pages.mjs"; console.log(JSON.stringify(await preparePages()));'],cwd=ROOT,capture_output=True,text=True,check=True)
+        stage=json.loads(packaged.stdout)
+        working_directory=Path(stage['directory'])
+        (working_directory/'wrangler.toml').write_text('name = "tempo-test"\npages_build_output_dir = "./public"\ncompatibility_date = "2026-10-29"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "tempo-test"\ndatabase_id = "11111111-1111-4111-8111-111111111111"\n')
+        arguments=['pages','dev',stage['publicDir'],'--ip','127.0.0.1','--port',str(port),'--persist-to',str(Path(temporary)/'db')]
     with (Path(temporary)/'worker.log').open('w+') as log:
-        process=subprocess.Popen([*command,'dev','--env','local','--local','--ip','127.0.0.1','--port',str(port),'--persist-to',str(Path(temporary)/'db')],cwd=ROOT,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+        process=subprocess.Popen([*command,*arguments],cwd=working_directory,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         try:
             for attempt in range(120):
                 try:
@@ -41,6 +51,13 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                         log.seek(0);raise AssertionError('Local Worker failed to start: '+log.read()[-4000:])
                     time.sleep(.25)
             check('real Worker initializes the dedicated D1 schema',True)
+            try:
+                with urlopen(base+'/_worker.js',timeout=5) as response:
+                    assert b'CREATE TABLE IF NOT EXISTS accounts' not in response.read()
+            except HTTPError as error:
+                # Reserved Pages paths may be rejected before normal asset routing.
+                assert b'CREATE TABLE IF NOT EXISTS accounts' not in error.read()
+            check('server bundle is never served as a public asset',True)
             with sync_playwright() as p:
                 chromium=os.environ.get('TEMPO_CHROMIUM') or shutil.which('chromium')
                 browser=p.chromium.launch(**({'executable_path':chromium} if chromium else {}),args=['--no-sandbox'])
@@ -117,6 +134,36 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 check('map and cloud status fit a mobile viewport',run(phone,'()=>document.documentElement.scrollWidth<=innerWidth'))
                 phone.screenshot(path=str(Path(os.environ.get('TEMPO_CLOUD_SCREENSHOT',str(Path(temporary)/'places.png')))),full_page=True)
 
+                # Strength details, independent targets, editing and cloud validation.
+                phone.goto(base+'/#diary')
+                phone.locator('[data-action="add"]').first.click();phone.locator('#entry-type').select_option('strength')
+                phone.locator('[name="duration"]').fill('50');phone.locator('[name="title"]').fill('Silový trénink se vzory');phone.locator('#workout-focus').select_option('fullbody')
+                for pattern,sets in [('squat',3),('hinge',3),('horizontal_push',3),('horizontal_pull',6)]:
+                    phone.locator('[data-action="add-exercise"]').click()
+                    row=phone.locator('.exercise-row').last;row.locator('.exercise-pattern').select_option(pattern);row.locator('.exercise-sets').fill(str(sets))
+                    if pattern=='hinge':row.locator('.exercise-name').fill('Rumunský mrtvý tah')
+                phone.locator('#save-entry').click();phone.locator('#entry-dialog').wait_for(state='hidden');sync(phone);sync(windows)
+                strength_entry=next(entry for entry in state(windows)['entries'] if entry['type']=='strength')
+                check('exercise patterns named exercises split and working sets synchronize to another device',strength_entry['workout']['focus']=='fullbody' and len(strength_entry['workout']['exercises'])==4 and strength_entry['workout']['exercises'][1]['name']=='Rumunský mrtvý tah')
+                phone.goto(base+'/#stats')
+                check('strength ratios count working sets rather than minutes or exercises','6 : 3' in phone.locator('#strength-balance').inner_text() and 'Vyšší podíl: tahy' in phone.locator('#strength-balance').inner_text())
+                phone.goto(base+'/#settings');phone.locator('[name="strengthPullPerPush"]').fill('2');phone.locator('#settings-form button[type="submit"]').click();sync(phone);sync(windows)
+                check('custom strength targets synchronize independently of other goals',state(windows)['settings']['strengthPullPerPush']==2)
+                phone.goto(base+'/#stats');phone.locator('[data-strength-period="28days"]').click()
+                check('strength pane applies the chosen target and supports a full split over 28 days','V rozmezí zvoleného cíle' in phone.locator('.strength-ratio').first.inner_text() and phone.locator('[data-strength-period="28days"]').get_attribute('class').find('active')>=0)
+                phone.goto(base+'/#diary');phone.locator('[data-action="edit"][data-id="'+strength_entry['id']+'"]').click()
+                check('editing restores every exercise and the workout focus',phone.locator('.exercise-row').count()==4 and phone.locator('#workout-focus').input_value()=='fullbody')
+                phone.locator('#workout-focus').select_option('custom');phone.locator('#workout-split').fill('Záda + biceps');phone.locator('.exercise-row').last.locator('[data-action="remove-exercise"]').click()
+                phone.locator('#save-entry').click();phone.locator('#entry-dialog').wait_for(state='hidden');sync(phone);sync(windows)
+                modified=next(entry for entry in state(windows)['entries'] if entry['id']==strength_entry['id'])
+                check('custom split names and removing an exercise survive sync',modified['workout']['splitName']=='Záda + biceps' and len(modified['workout']['exercises'])==3)
+                phone.goto(base+'/#settings')
+                with phone.expect_download() as download:
+                    phone.locator('[data-action="backup"]').click()
+                backup_path=Path(temporary)/'strength-backup.json';download.value.save_as(str(backup_path));backup=json.loads(backup_path.read_text())
+                check('complete backup preserves workout details and custom strength targets',next(entry for entry in backup['entries'] if entry['id']==strength_entry['id'])['workout']==modified['workout'] and backup['settings']['strengthPullPerPush']==2)
+                if not (run(phone,'()=>document.documentElement.scrollWidth<=innerWidth')):raise AssertionError('Strength controls overflow on mobile')
+
                 check('anonymous requests cannot read diaries',api(stranger,'/api/diary')['status']==401)
                 stranger_user=storage(stranger,'return s.authenticate("register",arg)',{'login':f'other-{uuid.uuid4().hex}@example.test','password':password})
                 check('a different account sees an empty diary',api(stranger,'/api/diary')['body']['state']['entries']==[])
@@ -126,6 +173,8 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 check('stale revision cannot overwrite newer data',api(phone,'/api/diary','PUT',{'revision':remote['revision']-1,'state':remote['state']})['status']==409)
                 invalid={**remote['state'],'entries':[{**remote['state']['entries'][0],'location':{'name':'Bad','latitude':99,'longitude':0}}]}
                 check('server independently rejects invalid coordinates',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':invalid})['status']==400)
+                bad_strength=json.loads(json.dumps(remote['state']));next(entry for entry in bad_strength['entries'] if entry['type']=='strength')['workout']['exercises'][0]['sets']=-2
+                check('server independently rejects invalid working sets',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_strength})['status']==400)
                 try:
                     urlopen(Request(base+'/api/logout',data=b'{}',headers={'Content-Type':'application/json','Origin':'https://unrelated.example'},method='POST'))
                     csrf=200
@@ -142,4 +191,5 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
             import signal
             os.killpg(process.pid,signal.SIGTERM)
             process.wait(timeout=15)
+            if stage:shutil.rmtree(stage['directory'])
 print(json.dumps({'passed':sum(checks),'failed':len(checks)-sum(checks)}))

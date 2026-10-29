@@ -2477,6 +2477,16 @@ button {
   .stat-top .stat-label { font-size: 8px; }
 }
 /* Accounts and optional places remain subordinate to the diary. */
+.strength-panel{margin:24px 0}
+.workout-details{margin-top:6px;font-size:12px;overflow-wrap:anywhere}.workout-details summary{cursor:pointer;color:#446c59;line-height:1.6}.workout-details ul{margin:8px 0;padding-left:18px}.workout-details li{margin:4px 0}
+.places-list>span{max-width:100%;overflow-wrap:anywhere}
+.strength-ratios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}
+.strength-ratio{padding:16px;border:1px solid #dce7e0;border-radius:12px;background:#f8faf8}
+.strength-ratio h3{font-size:14px;margin:0 0 12px}.strength-ratio>strong{font-size:28px;color:#214c3d}.strength-ratio p{font-size:12px;color:#687a71;margin:8px 0}.strength-ratio .tag{white-space:normal}
+.strength-pattern{display:grid;grid-template-columns:130px minmax(0,1fr) 75px;align-items:center;gap:12px;margin:12px 0;font-size:13px}.strength-pattern strong{text-align:right}.strength-pattern small{font-weight:400;color:#687a71}
+.exercise-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 110px;align-items:start;gap:10px;padding:14px 0;border-top:1px solid #dce7e0}
+.exercise-sets-row{display:flex;align-items:flex-end;gap:4px}.exercise-sets-row input{min-width:0}.exercise-row .form-field{min-width:0}.exercise-row select,.exercise-row input{width:100%;min-width:0}
+@media(max-width:760px){.strength-ratios{grid-template-columns:1fr}.strength-pattern{grid-template-columns:95px minmax(0,1fr) 65px;gap:8px}.strength-pattern .progress-track{min-width:0}.exercise-row{grid-template-columns:minmax(0,1fr) 95px}.exercise-row>label:first-child{grid-column:1/-1}.strength-panel>.panel-header{flex-wrap:wrap}.strength-panel .filter-row{margin:8px 0}}
 .account-panel,.places-panel{margin-top:24px;margin-bottom:24px}
 .account-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 16px;padding:8px 16px;border:1px solid #dbe7df;border-radius:12px;background:#f3f8f4;font-size:12px}
 .account-status>span{display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}

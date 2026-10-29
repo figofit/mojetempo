@@ -24,6 +24,6 @@ export function mergeDiaries(base,local,remote) {
     if(entry) entries.push(entry);
   }
   const settings={};
-  for(const key of Object.keys(DEFAULT_SETTINGS)) settings[key]=mergeValue(base.settings[key],local.settings[key],remote.settings[key]);
+  for(const key of Object.keys(DEFAULT_SETTINGS)) settings[key]=mergeValue(base.settings[key]??DEFAULT_SETTINGS[key],local.settings[key]??DEFAULT_SETTINGS[key],remote.settings[key]??DEFAULT_SETTINGS[key]);
   return {version:1,entries,settings,onboardingComplete:local.onboardingComplete||remote.onboardingComplete};
 }

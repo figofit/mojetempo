@@ -2,9 +2,10 @@ name = "mojetempo"
 main = "worker/index.mjs"
 compatibility_date = "2026-10-29"
 workers_dev = true
-routes = [
-  { pattern = "moje.itfit.cz", custom_domain = true }
-]
+
+# Preserve the existing Workers Builds connection; it also publishes Pages.
+[build]
+command = "node scripts/cloudflare_build.mjs"
 
 # Wrangler provisions a dedicated database on the first authorized deployment.
 # Existing provisioned binding IDs are reused on subsequent deployments.
