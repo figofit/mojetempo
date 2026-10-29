@@ -58,6 +58,26 @@ Aplikace je zveřejněná na **https://figofit.github.io/mojetempo/**. Nasazení
 
 V repozitáři na GitHubu nastav **Settings → Pages → Source → GitHub Actions**. Workflow `.github/workflows/pages.yml` po odeslání změn do větve `main` nebo ručním spuštění provede Node testy, sestavení, prohlížečové kontroly zabalené aplikace a `pwa_smoke.py`. Teprve po jejich úspěchu nasadí veřejné soubory do GitHub Pages. Výsledek ověř v běhu Actions a na cílové adrese. Publikování vývojového cloudového prostředí je samostatný krok a web na GitHub Pages nenasazuje.
 
+## Cloudflare Pages
+
+Cloudflare nasazení je připravené v `wrangler.toml`; k účtu zatím nebyl připojen přístup a veřejná adresa Cloudflare není potvrzená.
+
+Pro připojení přímo z Cloudflare vyber repozitář `figofit/mojetempo`, větev `main`, sestavovací příkaz `python3 scripts/build_site.py` a výstupní adresář `dist`. Žádné proměnné prostředí aplikace nejsou potřeba.
+
+Při přímém nahrání přes Wrangler musí být bezpečně nastavené `CLOUDFLARE_ACCOUNT_ID` a `CLOUDFLARE_API_TOKEN` s oprávněním Account → Cloudflare Pages → Edit pro vybraný účet. V cloudovém prostředí musí být také povolený přístup k `api.cloudflare.com`. Token patří do zabezpečeného nastavení, nikdy do Git repozitáře nebo chatu.
+
+```sh
+python3 scripts/build_site.py
+wrangler pages project list
+# Vytvoř nový projekt, pokud tento název ještě není používaný jinou aplikací:
+wrangler pages project create figofit-mojetempo --production-branch main
+wrangler pages deploy dist --project-name figofit-mojetempo --branch main
+```
+
+Cloudové prostředí má připravený Wrangler 4.155.0 v `/workspace/tools/cloudflare/node_modules/.bin/wrangler`. Pro neinteraktivní použití vypni telemetrii pomocí `WRANGLER_SEND_METRICS=false`; místní konfigurace může používat `XDG_CONFIG_HOME=/workspace/.config`. Před zápisem zkontroluj, že vybraný účet i projekt patří této aplikaci. Doménu používej až podle potvrzeného výsledku nasazení.
+
+Pro ruční nahrání je možné zabalit obsah `dist` do ZIP a použít Cloudflare Workers & Pages → Create application → Pages → Upload assets. ZIP musí mít `index.html` přímo v kořeni. Změna na doménu Cloudflare používá nové úložiště prohlížeče; existující deník přenes úplnou JSON zálohou.
+
 ## Telefon, offline režim a aktualizace
 
 Po nasazení otevři aplikaci online, aby si podporovaný prohlížeč připravil offline soubory. Na Androidu použij nabídku prohlížeče **Přidat na plochu / Instalovat aplikaci**, případně tlačítko instalace v aplikaci, pokud jej prohlížeč nabídne. Na iPhonu otevři web v Safari a zvol **Sdílet → Přidat na plochu**. Tyto kroky v rozhraní skutečných telefonů zatím nebyly ověřeny.
