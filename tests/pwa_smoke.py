@@ -71,6 +71,13 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self) -> None:
+        # Cloudflare canonicalizes index.html to the directory root. Cover
+        # redirected precache responses during reload and offline navigation.
+        if self.path.split("?", 1)[0] == "/hubnuti/index.html":
+            self.send_response(302)
+            self.send_header("Location", "/hubnuti/")
+            self.end_headers()
+            return
         if self.path.split("?", 1)[0] == "/hubnuti/private.json":
             body = b'{"private":"must never enter the shell cache"}'
             self.send_response(200)

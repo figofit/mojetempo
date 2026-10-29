@@ -142,3 +142,54 @@ jobs:
           path: |
             ${{ runner.temp }}/tempo-live-browser-smoke.jsonl
             ${{ runner.temp }}/tempo-live-browser-artifacts/
+
+  verify-cloudflare:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install cloudflare-site browser verification tools
+        run: |
+          python3 -m pip install playwright==1.62.0
+          python3 -m playwright install --with-deps chromium
+      - name: Wait for Cloudflare deployment
+        run: |
+          python3 - <<'PYWAIT'
+          from urllib.request import urlopen
+          import time
+          for attempt in range(40):
+              try:
+                  with urlopen('https://mojetempo.m-dokoupil69.workers.dev/', timeout=5) as response:
+                      assert response.status == 200
+                      assert 'Moje tempo' in response.read().decode()
+                  break
+              except (OSError, AssertionError):
+                  if attempt == 39:
+                      raise
+                  time.sleep(3)
+          PYWAIT
+      - name: Verify actual published Cloudflare application
+        shell: bash
+        env:
+          TEMPO_BASE_URL: https://mojetempo.m-dokoupil69.workers.dev/
+          TEMPO_ARTIFACTS_DIR: ${{ runner.temp }}/tempo-live-browser-artifacts
+        run: |
+          set +e
+          python3 tests/browser_smoke.py > "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl" --name "Published Cloudflare browser verification" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
+      - name: Retain cloudflare-site verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-site-verification-diagnostics
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/tempo-live-browser-smoke.jsonl
+            ${{ runner.temp }}/tempo-live-browser-artifacts/

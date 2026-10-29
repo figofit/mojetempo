@@ -65,11 +65,24 @@ async function shellResponse(canonicalUrl, request) {
   const cached = await cache.match(canonicalUrl);
   // Cache-first prevents a new index from loading an older cached JavaScript.
   // The next complete shell arrives through the service-worker update lifecycle.
-  if (cached) return cached;
+  if (cached) return portableResponse(cached, request);
   // If a cache entry was evicted, never substitute an unverified newer asset.
   const path = SHELL_PATHS.find(path => new URL(path, BASE_URL).href === canonicalUrl);
   const response = await fetch(verifiedRequest(path));
   if (!response.ok) throw new Error(`App-shell asset unavailable: ${path}`);
+  return portableResponse(response, request);
+}
+
+function portableResponse(response, request) {
+  // Static hosts may redirect index.html to /. A cached redirected response
+  // cannot satisfy a navigation request whose redirect mode is manual.
+  if (request.mode === 'navigate' && response.redirected) {
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
   return response;
 }
 
