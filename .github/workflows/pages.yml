@@ -1,0 +1,81 @@
+name: Test and deploy Moje tempo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never interrupt an active production deployment with a newer push.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test domain rules and safe packaging
+        run: node --test tests/*.test.mjs
+      - name: Build public application only
+        run: python3 scripts/build_site.py
+      - name: Install browser test tools
+        run: |
+          python3 -m pip install playwright==1.62.0
+          python3 -m playwright install --with-deps chromium
+      - name: Test packaged application at its project subpath
+        shell: bash
+        env:
+          TEMPO_BASE_URL: http://127.0.0.1:8000/hubnuti/
+        run: |
+          set -euo pipefail
+          tempo_serve_root="$(mktemp -d)"
+          cp -R dist "$tempo_serve_root/hubnuti"
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$tempo_serve_root" > "$RUNNER_TEMP/tempo-server.log" 2>&1 &
+          tempo_server_pid=$!
+          trap 'kill "$tempo_server_pid" 2>/dev/null || true; rm -rf "$tempo_serve_root"' EXIT
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          import time
+          for attempt in range(50):
+              try:
+                  with urlopen('http://127.0.0.1:8000/hubnuti/', timeout=1) as response:
+                      assert response.status == 200
+                  break
+              except (OSError, AssertionError):
+                  if attempt == 49:
+                      raise
+                  time.sleep(0.1)
+          PY
+          python3 tests/browser_smoke.py
+      - name: Test offline use and safe release updates
+        run: python3 tests/pwa_smoke.py
+      - name: Upload tested public assets
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check GitHub Pages configuration
+        uses: actions/configure-pages@v5
+      - name: Deploy verified application
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -15,40 +15,58 @@ První verze slouží k ověření každodenního používání. Navazuje na zá
 - Oddělenou ukázku, která nepředstírá skutečné osobní záznamy.
 - Úplnou zálohu a obnovu deníku v JSON včetně fotografií, cílů a modulů.
 - Export záznamů do CSV a kalendářového souboru ICS.
+- V sestavené verzi použití bez připojení a přidání aplikace na plochu.
 
 ICS lze importovat do Google Kalendáře. Jde o jednorázový export, nikoli automatickou nebo obousměrnou synchronizaci. Doporučení vycházejí z jednoduchých pravidel a zaznamenaných dat; aplikace nepoužívá službu AI ani neposkytuje zdravotní posouzení.
 
 ## Spuštění při vývoji
 
-Projekt používá HTML, CSS a nativní JavaScriptové moduly. Nepotřebuje instalaci balíčků, sestavení, databázový server ani API klíče.
+Projekt používá HTML, CSS a nativní JavaScriptové moduly. Aplikace nepotřebuje instalaci balíčků, databázový server ani API klíče. Při vývoji lze přímo spustit zdrojové soubory:
 
-Z kořene repozitáře spusť:
+Z kořene repozitáře:
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1 --directory .
 ```
 
-V cloudovém prostředí je pracovní adresář `/workspace/hubnuti`. Server musí po každém novém spuštění prostředí znovu běžet; živé procesy nejsou součástí uloženého obrazu prostředí. Stránku načítej přes HTTP, nikoli přímo jako soubor, aby fungovaly JavaScriptové moduly a úložiště prohlížeče.
+V cloudovém prostředí je pracovní adresář `/workspace/hubnuti`. Server je nutné po novém spuštění prostředí spustit znovu. Stránku načítej přes HTTP, nikoli přímo jako soubor. Zdrojová verze ponechává zástupnou hodnotu `tempo-build` a sama neregistruje service worker, aby vývoj nezůstával ve staré offline mezipaměti.
 
-Testy doménové logiky vyžadují Node.js:
+Testy doménové logiky a balení vyžadují Node.js:
 
 ```sh
 node --test tests/*.test.mjs
 ```
 
-Při změnách uživatelského rozhraní ověř také zápis aktivity, přepočet statistik, zachování dat po obnovení stránky a použití na mobilní šířce.
-
-V připraveném cloudovém prostředí je dostupný také Playwright a Chromium. Při běžícím serveru ověří celý postup v izolovaném prohlížeči:
+V připraveném cloudovém prostředí je dostupný Playwright a Chromium. První příkaz níže používá běžící server; druhý vytváří vlastní dočasné sestavení a server pro test offline režimu a aktualizací:
 
 ```sh
 python3 tests/browser_smoke.py
+python3 tests/pwa_smoke.py
 ```
 
-Test používá dočasná data a nezasahuje do osobního deníku. Pro jiný server nastav `TEMPO_BASE_URL`, pro jiný Chromium `TEMPO_CHROMIUM`. Playwright je vývojový nástroj prostředí; aplikace samotná ho nepotřebuje.
+Testy používají izolovaný prohlížeč a dočasná data. Pro jiný server nastav `TEMPO_BASE_URL`, pro jiný Chromium `TEMPO_CHROMIUM`. Playwright je vývojový nástroj; aplikace samotná ho nepotřebuje.
+
+## Sestavení a GitHub Pages
+
+```sh
+python3 scripts/build_site.py
+```
+
+Příkaz připraví `dist/` s výslovně povolenými veřejnými soubory aplikace, ikonami, manifestem a service workerem. Nepublikuje celý repozitář, testy ani dokumentaci. Do sestavení doplní verzi pro offline mezipaměť. Publikuje se pouze obsah `dist/`; manifest a relativní odkazy podporují také projektovou cestu `/hubnuti/`.
+
+Cílová adresa nasazení je **https://figofit.github.io/hubnuti/**. Její dostupnost zatím není potvrzena.
+
+V repozitáři na GitHubu nastav **Settings → Pages → Source → GitHub Actions**. Workflow `.github/workflows/pages.yml` po odeslání změn do větve `main` nebo ručním spuštění provede Node testy, sestavení, prohlížečové kontroly zabalené aplikace a `pwa_smoke.py`. Teprve po jejich úspěchu nasadí veřejné soubory do GitHub Pages. Výsledek ověř v běhu Actions a na cílové adrese. Publikování vývojového cloudového prostředí je samostatný krok a web na GitHub Pages nenasazuje.
+
+## Telefon, offline režim a aktualizace
+
+Po nasazení otevři aplikaci online, aby si podporovaný prohlížeč připravil offline soubory. Na Androidu použij nabídku prohlížeče **Přidat na plochu / Instalovat aplikaci**, případně tlačítko instalace v aplikaci, pokud jej prohlížeč nabídne. Na iPhonu otevři web v Safari a zvol **Sdílet → Přidat na plochu**. Tyto kroky v rozhraní skutečných telefonů zatím nebyly ověřeny.
+
+Offline soubory umožňují otevřít aplikaci bez připojení; záznamy a fotografie dál zůstávají v IndexedDB téhož prohlížeče. Nová verze se nabídne v pruhu **Nová verze je připravená**. Nejdřív dokonči nebo zavři rozepsaný formulář a potom zvol **Aktualizovat**. Uložený deník se při aktualizaci nemaže.
 
 ## Kde zůstávají data
 
-Záznamy, nastavení a fotografie se ukládají místně do IndexedDB konkrétního prohlížeče. Neodesílají se na aplikační server. Jiný prohlížeč, jiná adresa aplikace nebo smazání dat webu znamenají jiné či prázdné úložiště. Změna zařízení sama data nepřenese.
+Záznamy, nastavení a fotografie se ukládají místně do IndexedDB konkrétního prohlížeče. Neodesílají se na aplikační server. Drž se stejné adresy a prohlížeče: změna domény, protokolu nebo portu znamená jiné úložiště. Změna zařízení sama data nepřenese. Před změnou adresy nebo smazáním dat webu stáhni zálohu.
 
 V části **Cíle a nastavení** zvol **Stáhnout celou zálohu**. Soubor JSON obsahuje všechny záznamy, cíle, zapnuté moduly a uložené fotografie. Zálohuj před změnou zařízení, adresy aplikace nebo vymazáním dat prohlížeče. Soubor obsahuje osobní záznamy a fotky v nešifrované podobě.
 

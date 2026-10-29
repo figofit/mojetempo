@@ -1,5 +1,6 @@
 import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, localDate, validateEntry, computeStats, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
 import { loadState, updateState, savePhoto, getPhoto, deletePhoto } from './storage.mjs';
+import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 
 const paths = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -337,6 +338,8 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(name==='install-app') await requestInstall();
+  if(name==='update-app') acceptUpdate();
   if(name==='add') await openEntry();
   if(name==='close-entry') $('#entry-dialog').close();
   if(name==='start-own') await startOwn();
@@ -404,6 +407,7 @@ try {
   demo=!state.onboardingComplete&&state.entries.length===0;
   demoEntries=createDemoEntries();
   navigate(location.hash.slice(1));
+  initializePWA({notify});
 } catch(error) {
   storageReady=false;
   $('#view-content').innerHTML=`<section class="panel" role="alert"><h1>Deník se nepodařilo otevřít.</h1><p>${esc(error.message||'Povol ukládání dat v prohlížeči a obnov stránku.')}</p><p>Původní data jsme nepřepsali. Zkus stejný prohlížeč a stejnou adresu aplikace.</p></section>`;
