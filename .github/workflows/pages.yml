@@ -159,15 +159,21 @@ jobs:
         run: |
           python3 - <<'PYWAIT'
           from urllib.request import urlopen
-          import time
-          for attempt in range(40):
+          from html import escape
+          import os, re, time
+          for attempt in range(60):
               try:
                   with urlopen('https://mojetempo.m-dokoupil69.workers.dev/', timeout=5) as response:
-                      assert response.status == 200
-                      assert 'Moje tempo' in response.read().decode()
+                      body = response.read().decode()
+                      title = re.findall(r'<title>(.*?)</title>', body)
+                      assert response.status == 200, f'HTTP {response.status}'
+                      assert 'Moje tempo' in body, f'HTTP 200 but unexpected page title: {title}'
                   break
-              except (OSError, AssertionError):
-                  if attempt == 39:
+              except (OSError, AssertionError) as error:
+                  print(f'Cloudflare readiness attempt {attempt + 1}: {type(error).__name__}: {error}', flush=True)
+                  if attempt == 59:
+                      with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                          summary.write('## Cloudflare readiness failed\n<pre>' + escape(str(error)) + '</pre>\n')
                       raise
                   time.sleep(3)
           PYWAIT
