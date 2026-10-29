@@ -26,6 +26,8 @@ jobs:
           python-version: '3.12'
       - name: Test domain rules and safe packaging
         run: node --test tests/*.test.mjs
+      - name: Install pinned local Worker test runtime
+        run: npm ci --no-audit --no-fund
       - name: Build public application only
         run: python3 scripts/build_site.py
       - name: Install browser test tools
@@ -74,6 +76,16 @@ jobs:
           cat "$RUNNER_TEMP/tempo-pwa-smoke.jsonl"
           python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-pwa-smoke.jsonl" --name "Offline and update smoke" --exit-code "$tempo_test_status" || true
           exit "$tempo_test_status"
+      - name: Test accounts D1 synchronization and optional maps
+        shell: bash
+        run: |
+          set +e
+          python3 tests/cloud_smoke.py > "$RUNNER_TEMP/tempo-cloud-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-cloud-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-cloud-smoke.jsonl" --name "Accounts D1 and maps" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
       - name: Retain smoke-test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,6 +95,7 @@ jobs:
           path: |
             ${{ runner.temp }}/tempo-browser-smoke.jsonl
             ${{ runner.temp }}/tempo-pwa-smoke.jsonl
+            ${{ runner.temp }}/tempo-cloud-smoke.jsonl
             ${{ runner.temp }}/tempo-server.log
             ${{ runner.temp }}/tempo-browser-artifacts/
       - name: Upload tested public assets
@@ -155,28 +168,10 @@ jobs:
         run: |
           python3 -m pip install playwright==1.62.0
           python3 -m playwright install --with-deps chromium
-      - name: Wait for Cloudflare deployment
-        run: |
-          python3 - <<'PYWAIT'
-          from urllib.request import urlopen
-          from html import escape
-          import os, re, time
-          for attempt in range(60):
-              try:
-                  with urlopen('https://mojetempo.m-dokoupil69.workers.dev/', timeout=5) as response:
-                      body = response.read().decode()
-                      title = re.findall(r'<title>(.*?)</title>', body)
-                      assert response.status == 200, f'HTTP {response.status}'
-                      assert 'Moje tempo' in body, f'HTTP 200 but unexpected page title: {title}'
-                  break
-              except (OSError, AssertionError) as error:
-                  print(f'Cloudflare readiness attempt {attempt + 1}: {type(error).__name__}: {error}', flush=True)
-                  if attempt == 59:
-                      with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-                          summary.write('## Cloudflare readiness failed\n<pre>' + escape(str(error)) + '</pre>\n')
-                      raise
-                  time.sleep(3)
-          PYWAIT
+      - name: Wait for Cloudflare deployment in a real browser
+        env:
+          TEMPO_BASE_URL: https://mojetempo.m-dokoupil69.workers.dev/
+        run: python3 scripts/verify_ready.py
       - name: Verify actual published Cloudflare application
         shell: bash
         env:

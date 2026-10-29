@@ -1,4 +1,4 @@
-/** Optional install/offline shell. Journal data stay exclusively in IndexedDB. */
+/** Optional install/offline shell. Private diary data never enter the shell cache. */
 let deferredPrompt;
 let waitingWorker;
 let updateAccepted = false;

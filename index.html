@@ -11,6 +11,7 @@
     <title>Moje tempo — tvůj pohyb, tvůj příběh</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23176b5b'/%3E%3Cpath d='M8 23h7l4-12 5 20 4-8h5' fill='none' stroke='%23c5edb3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <script type="module" src="app.js"></script>
@@ -28,13 +29,14 @@
           <div class="sidebar-note"><span class="tag">JEDEN DEN PO DRUHÉM</span><p>Nemusíš překonat ostatní.<br>Stačí najít svoje tempo.</p><svg viewBox="0 0 160 42" fill="none" aria-hidden="true"><path d="M0 33C25 33 14 6 39 15S58 41 77 21s22 13 40-2 26-8 43-15" stroke="#87b7a1" stroke-width="2" stroke-linecap="round"/></svg></div>
           <button class="nav-item" data-action="toggle-demo" id="demo-toggle"></button>
           <button class="nav-item" data-view="settings" id="settings-nav"></button>
-          <div class="sidebar-profile"><span class="profile-avatar">MT</span><div><strong>Moje tempo</strong><small>Osobní deník · v tomto prohlížeči</small></div></div>
+          <div class="sidebar-profile"><span class="profile-avatar">MT</span><div><strong>Moje tempo</strong><small id="account-profile">Osobní deník · v tomto prohlížeči</small></div></div>
         </div>
       </aside>
       <main class="main" id="main">
         <header class="topbar"><span class="breadcrumb">Můj prostor <span aria-hidden="true">/</span> <strong id="breadcrumb-current">Přehled</strong></span><div class="topbar-actions"><button id="install-app" class="button secondary small hidden" data-action="install-app">Přidat na plochu</button><span class="privacy-label" id="privacy-label"></span><button class="avatar icon-button" data-view="settings" aria-label="Cíle a nastavení">MT</button></div></header>
         <div id="pwa-status" aria-live="polite"></div>
         <div id="pwa-update" aria-live="polite"></div>
+        <div id="account-status" aria-live="polite"></div>
         <div id="demo-banner"></div>
         <div id="view-content" aria-live="polite"></div>
       </main>
@@ -48,7 +50,10 @@
           <label class="form-field">Datum<input name="date" id="entry-date" type="date" required /></label>
           <label class="form-field" id="entry-duration-field">Délka v minutách<input name="duration" type="number" min="1" max="1440" step="1" placeholder="45" required /></label>
           <label class="form-field" id="entry-steps-field">Počet kroků <span class="form-hint">nepovinné</span><input name="steps" type="number" min="0" max="200000" step="1" placeholder="Např. 6500" /><small class="form-hint">Kroky jen této aktivity, ne opakovaně celkový stav dne.</small></label>
+          <label class="form-field" id="entry-distance-field">Vzdálenost (km) <span class="form-hint">nepovinné</span><input name="distance" type="number" min="0" max="2000" step="0.01" placeholder="Např. 8,5" /></label>
+          <label class="form-field" id="entry-elevation-field">Nastoupané metry <span class="form-hint">nepovinné</span><input name="elevation" type="number" min="0" max="20000" step="1" placeholder="Např. 420" /></label>
         </div>
+        <fieldset class="place-fields"><legend>Místo <span class="form-hint">nepovinné · pro jakýkoliv zápis</span></legend><label class="form-field">Název místa<input id="place-query" maxlength="200" placeholder="Např. Praděd, Stromovka, okruh u řeky…" /></label><div class="place-actions"><button type="button" class="button secondary small" data-action="search-place">Vyhledat místo</button><button type="button" class="button ghost small" data-action="locate-place">Použít mou polohu</button><button type="button" class="button ghost small" data-action="clear-place">Odebrat místo</button></div><div id="place-results"></div><p id="place-status" class="form-hint" aria-live="polite"></p><details><summary>Zadat souřadnice ručně</summary><div class="form-grid"><label class="form-field">Zeměpisná šířka<input id="place-latitude" type="number" min="-90" max="90" step="any" placeholder="49.8" /></label><label class="form-field">Zeměpisná délka<input id="place-longitude" type="number" min="-180" max="180" step="any" placeholder="15.5" /></label></div></details><small class="form-hint">Vyhledání odešle název místa službě Photon. Polohu použijeme jen po tvém potvrzení.</small></fieldset>
         <label class="form-field">Název momentu <span class="form-hint">nepovinné</span><input name="title" maxlength="120" placeholder="První návštěva Element Gymu…" /></label>
         <fieldset class="mood-fieldset"><legend>Jak ses cítil/a? <span class="form-hint">nepovinné</span></legend><div class="mood-options" id="mood-options"></div></fieldset>
         <div id="entry-chronicle-fields"><label class="form-field">Poznámka do kroniky<textarea name="note" rows="3" maxlength="3000" placeholder="Co ti udělalo radost? Co si chceš zapamatovat?"></textarea></label>
@@ -57,6 +62,7 @@
         <div class="form-actions"><button class="button secondary" type="button" data-action="close-entry">Zrušit</button><button class="button primary" id="save-entry" type="submit">Uložit aktivitu</button></div>
       </form>
     </dialog>
+    <dialog id="account-dialog" class="dialog" aria-labelledby="account-heading"><div class="dialog-header"><div><p class="eyebrow">TVŮJ DENÍK NA VŠECH ZAŘÍZENÍCH</p><h2 id="account-heading">Přihlásit se</h2></div><button class="icon-button" type="button" data-action="close-account" aria-label="Zavřít účet">×</button></div><form id="account-form" class="dialog-body"><div class="filter-row"><button type="button" class="filter-chip active" data-auth-mode="login">Přihlášení</button><button type="button" class="filter-chip" data-auth-mode="register">Nový účet</button><button type="button" class="filter-chip" data-auth-mode="recover">Obnova hesla</button></div><label class="form-field">E-mail<input name="login" type="email" maxlength="254" autocomplete="username" required /></label><label class="form-field">Heslo <span class="form-hint">12 až 128 znaků</span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required /></label><label class="form-field hidden" id="recovery-field">Obnovovací klíč<input name="recoveryCode" autocomplete="off" maxlength="64" /></label><p class="form-hint" id="auth-help">Na dalším zařízení se přihlas stejným e-mailem a heslem.</p><p class="form-error" id="account-error" role="alert"></p><button type="submit" class="button primary" id="account-submit">Přihlásit se</button></form><div id="recovery-result" class="dialog-body hidden"><h3>Ulož si obnovovací klíč</h3><p>Je to jediný způsob obnovení zapomenutého hesla. E-maily pro obnovu zatím neposíláme. Při obnově účtu se předchozí klíč zneplatní.</p><textarea id="recovery-code" readonly rows="3" aria-label="Obnovovací klíč"></textarea><div class="export-buttons"><button class="button secondary" data-action="download-recovery">Stáhnout klíč</button><button class="button primary" data-action="close-account">Klíč mám uložený</button></div></div></dialog>
     <input id="import-file" class="hidden" type="file" accept="application/json,.json" />
     <div id="toast" class="toast hidden" role="status"></div>
     <noscript><p>Pro zápis aktivit a statistiky prosím zapni JavaScript.</p></noscript>

@@ -25,6 +25,12 @@ PUBLIC_FILES = (
     "app.js",
     "domain.mjs",
     "storage.mjs",
+    "local-storage.mjs",
+    "sync-rules.mjs",
+    "places.mjs",
+    "vendor/leaflet/leaflet.js",
+    "vendor/leaflet/leaflet.css",
+    "vendor/leaflet/LICENSE",
     "pwa.mjs",
     "manifest.webmanifest",
     "service-worker.js",
@@ -34,7 +40,7 @@ PUBLIC_FILES = (
     "icons/maskable-512.png",
 )
 OUTPUT_FILES = frozenset((*PUBLIC_FILES, ".nojekyll", MARKER))
-OUTPUT_DIRS = frozenset({"icons"})
+OUTPUT_DIRS = frozenset({"icons", "vendor", "vendor/leaflet"})
 
 
 def reject_symlink_path(path: Path) -> None:

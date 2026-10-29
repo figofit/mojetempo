@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 const builder = fileURLToPath(new URL('../scripts/build_site.py', import.meta.url));
 const assets = [
   'index.html', 'styles.css', 'app.js', 'domain.mjs', 'storage.mjs',
+  'local-storage.mjs', 'sync-rules.mjs', 'places.mjs', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/LICENSE',
   'manifest.webmanifest', 'service-worker.js', 'pwa.mjs', 'icons/icon.svg',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
 ];

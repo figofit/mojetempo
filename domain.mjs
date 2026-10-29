@@ -3,6 +3,7 @@ export const ACTIVITY_TYPES = Object.freeze([
   { id: 'strength', label: 'Posilovna', icon: 'dumbbell', category: 'movement', color: '#487766', unit: 'min' },
   { id: 'cycling', label: 'Kolo', icon: 'bike', category: 'movement', color: '#90a96b', unit: 'min' },
   { id: 'walking', label: 'Chůze', icon: 'footprints', category: 'movement', color: '#c0a16c', unit: 'min' },
+  { id: 'hiking', label: 'Výšlap / turistika', icon: 'mountain', category: 'movement', color: '#638b60', unit: 'min' },
   { id: 'cardio', label: 'Kardio', icon: 'heart', category: 'movement', color: '#bf806b', unit: 'min' },
   { id: 'home', label: 'Domácí trénink', icon: 'home', category: 'movement', color: '#7296a3', unit: 'min' },
   { id: 'sauna', label: 'Sauna', icon: 'flame', category: 'recovery', color: '#d5ac74', unit: 'min' },
@@ -13,7 +14,7 @@ export const ACTIVITY_TYPES = Object.freeze([
 ]);
 
 export const MODULES = Object.freeze([
-  { id: 'movement', label: 'Pohyb', description: 'Tréninky, kolo, chůze a aktivní minuty.' },
+  { id: 'movement', label: 'Pohyb', description: 'Tréninky, kolo, chůze, výšlapy a aktivní minuty.' },
   { id: 'recovery', label: 'Regenerace', description: 'Sauna, wellness a prostor pro odpočinek.' },
   { id: 'steps', label: 'Kroky', description: 'Denní kroky a pravidelnost v průběhu týdne.' },
   { id: 'chronicle', label: 'Kronika', description: 'Fotky, poznámky a momenty na tvé cestě.' },
@@ -66,12 +67,14 @@ function makeId() {
 }
 
 /** Returns errors as Czech messages, and a normalized whitelisted entry. */
-export function validateEntry(input) {
+export function validateEntry(input, today = localDate()) {
   input = input && typeof input === 'object' ? input : {};
   const errors = [];
   const independent = input.type === 'steps' || input.type === 'moment';
   const duration = optionalNumber(input.duration, independent ? 0 : NaN);
   const steps = optionalNumber(input.steps);
+  const distance = optionalNumber(input.distance);
+  const elevation = optionalNumber(input.elevation);
   const mood = optionalNumber(input.mood, null);
   const title = String(input.title ?? '').trim();
   const note = String(input.note ?? '').trim();
@@ -79,14 +82,22 @@ export function validateEntry(input) {
 
   if (!typeById.has(input.type)) errors.push('Vyber druh aktivity.');
   if (!parseDate(date)) errors.push('Zadej platné datum.');
-  else if (date > localDate()) errors.push('Deník je pro dokončené aktivity. Datum nemůže být v budoucnosti.');
+  else if (date > today) errors.push('Deník je pro dokončené aktivity. Datum nemůže být v budoucnosti.');
   if (!Number.isInteger(duration) || duration < (independent ? 0 : 1) || duration > 1440) errors.push(independent ? 'Délka zápisu musí být celé číslo od 0 do 1 440 minut.' : 'Délka aktivity musí být 1 až 1 440 celých minut.');
   if (!Number.isInteger(steps) || steps < 0 || steps > 200000) errors.push('Kroky musí být celé číslo od 0 do 200 000.');
+  if (!Number.isFinite(distance) || distance < 0 || distance > 2000) errors.push('Vzdálenost musí být od 0 do 2 000 km.');
+  if (!Number.isInteger(elevation) || elevation < 0 || elevation > 20000) errors.push('Převýšení musí být celé číslo od 0 do 20 000 metrů.');
   if (input.type === 'steps' && (!Number.isInteger(steps) || steps <= 0)) errors.push('Pro zápis kroků zadej kladný počet kroků.');
   if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 5)) errors.push('Nálada musí být na stupnici 1 až 5.');
   if (title.length > 120) errors.push('Název může mít nejvýše 120 znaků.');
   if (note.length > 3000) errors.push('Poznámka může mít nejvýše 3 000 znaků.');
   if (input.type === 'moment' && !title && !note && !(typeof input.photoId === 'string' && input.photoId.trim())) errors.push('Moment do kroniky potřebuje název, poznámku nebo fotografii.');
+  let location;
+  if (input.location != null) {
+    const place=input.location;
+    if (!place || typeof place.name !== 'string' || !place.name.trim() || place.name.length > 200 || typeof place.latitude !== 'number' || !Number.isFinite(place.latitude) || Math.abs(place.latitude)>90 || typeof place.longitude !== 'number' || !Number.isFinite(place.longitude) || Math.abs(place.longitude)>180) errors.push('Místo potřebuje název a platné souřadnice.');
+    else location={name:place.name.trim(),latitude:place.latitude,longitude:place.longitude};
+  }
 
   const entry = {
     id: typeof input.id === 'string' && input.id ? input.id : makeId(),
@@ -94,12 +105,15 @@ export function validateEntry(input) {
     date,
     duration,
     steps,
+    distance,
+    elevation,
     mood,
     title,
     note,
     createdAt: typeof input.createdAt === 'string' && input.createdAt ? input.createdAt : new Date().toISOString(),
   };
   if (typeof input.photoId === 'string' && input.photoId) entry.photoId = input.photoId;
+  if (location) entry.location = location;
   return { valid: errors.length === 0, errors, entry };
 }
 
@@ -140,6 +154,9 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
     weekRecovery: recovery.length,
     todaySteps: validEntries.filter((entry) => entry.date === today).reduce((total, entry) => total + numberOrZero(entry.steps), 0),
     weekSteps,
+    weekHikes: movement.filter(entry => entry.type === 'hiking').length,
+    weekDistance: movement.reduce((total, entry) => total + numberOrZero(entry.distance), 0),
+    weekElevation: movement.reduce((total, entry) => total + numberOrZero(entry.elevation), 0),
     weekGoalPercent: Math.round((weekMinutes / weeklyTarget) * 100),
     daysActive: new Set(movement.map((entry) => entry.date)).size,
     weekDaily: Array.from({ length: 7 }, (_, index) => ({ ...summarizeDay(localDate(addDays(monday, index))), label: weekdays[index] })),
@@ -186,8 +203,8 @@ function csvCell(value) {
 }
 
 export function exportCSV(entries = []) {
-  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka']];
-  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note]);
+  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka']];
+  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '']);
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(';')).join('\r\n')}\r\n`;
 }
 
@@ -221,7 +238,7 @@ export function exportICS(entries = []) {
   for (const entry of entries) {
     const day = parseDate(entry.date);
     if (!day) continue;
-    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.note].filter(Boolean).join('\n');
+    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', entry.note].filter(Boolean).join('\n');
     lines.push(
       'BEGIN:VEVENT',
       `UID:${encodeURIComponent(String(entry.id || `${entry.date}-${entry.type}`))}@mojetempo.local`,
@@ -230,6 +247,7 @@ export function exportICS(entries = []) {
       `DTEND;VALUE=DATE:${localDate(addDays(day, 1)).replaceAll('-', '')}`,
       `SUMMARY:${icalEscape(entry.title || typeById.get(entry.type)?.label || 'Aktivita')}`,
       `DESCRIPTION:${icalEscape(description)}`,
+      ...(entry.location?[`LOCATION:${icalEscape(entry.location.name)}`,`GEO:${entry.location.latitude};${entry.location.longitude}`]:[]),
       'TRANSP:TRANSPARENT',
       'END:VEVENT',
     );
@@ -246,10 +264,10 @@ export function createDemoEntries(date = new Date()) {
     { days: 0, type: 'steps', duration: 0, steps: 3200, mood: 4, title: 'Mezi schůzkami', note: 'Další kroky během dne mimo zaznamenaný trénink.' },
     { days: 1, type: 'cycling', duration: 45, steps: 0, mood: 5, title: 'Na chvíli vypnout', note: 'Podvečerní jízda podél řeky. Vlastní tempo, čistá hlava.' },
     { days: 1, type: 'sauna', duration: 25, steps: 0, mood: 5, title: 'Teplo a klid', note: 'Po pohybu chvíle regenerace.' },
-    { days: 2, type: 'walking', duration: 35, steps: 6200, mood: 4, title: 'Delší cestou domů', note: 'Místo tramvaje procházka parkem.' },
+    { days: 2, type: 'walking', duration: 35, steps: 6200, distance: 3.8, mood: 4, title: 'Delší cestou domů', note: 'Místo tramvaje procházka parkem.', location:{name:'Stromovka, Praha',latitude:50.105,longitude:14.417} },
     { days: 3, type: 'home', duration: 25, steps: 1800, mood: 3, title: 'I málo je něco', note: 'Krátký domácí trénink mezi pracovními úkoly.' },
     { days: 4, type: 'recovery', duration: 20, steps: 0, mood: 4, title: 'Zpomalit', note: 'Lehké protažení a večer bez spěchu.' },
-    { days: 5, type: 'walking', duration: 50, steps: 8500, mood: 5, title: 'Víkend venku', note: 'Čerstvý vzduch a nový výhled.' },
+    { days: 5, type: 'hiking', duration: 120, steps: 12500, distance: 8.5, elevation: 420, mood: 5, title: 'Víkend venku', note: 'Ukázkový výšlap: čerstvý vzduch a nový výhled.', location:{name:'Praděd',latitude:50.083,longitude:17.231} },
     { days: 5, type: 'moment', duration: 0, steps: 0, mood: 5, title: 'Výhled, který zůstal v hlavě', note: 'Ne všechno potřebuje stopky. Někdy si chceš uchovat jen moment.' },
     { days: 6, type: 'strength', duration: 50, steps: 2100, mood: 4, title: 'Další malý krok', note: 'Technika a soustředění.' },
     { days: 8, type: 'cycling', duration: 65, steps: 0, mood: 5, title: 'Za město', note: 'Ukázkový záznam výletu.' },

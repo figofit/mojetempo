@@ -4,6 +4,18 @@ import { ACTIVITY_TYPES, DEFAULT_SETTINGS, localDate, validateEntry, computeStat
 
 const sample = (overrides = {}) => ({ id: 'test', type: 'strength', date: '2026-10-29', duration: 50, steps: 0, mood: 4, title: '', note: '', ...overrides });
 
+test('hikes and places persist distances and ascent in statistics and exports',()=>{
+  const location={name:'Praděd',latitude:50.083,longitude:17.231};
+  const {valid,entry}=validateEntry(sample({type:'hiking',duration:120,distance:'8.5',elevation:'420',location}));
+  assert.ok(valid);assert.equal(entry.distance,8.5);assert.equal(entry.elevation,420);assert.deepEqual(entry.location,location);
+  const stats=computeStats([entry],DEFAULT_SETTINGS,new Date(2026,9,29,12));
+  assert.equal(stats.weekHikes,1);assert.equal(stats.weekDistance,8.5);assert.equal(stats.weekElevation,420);assert.equal(stats.weekMinutes,120);
+  assert.match(exportCSV([entry]),/Praděd/);assert.match(exportICS([entry]).replace(/\r\n /g,''),/GEO:50.083;17.231/);
+  for(const bad of [{latitude:91,longitude:0},{latitude:'50',longitude:17},{latitude:50,longitude:NaN}])assert.ok(!validateEntry(sample({location:{name:'Místo',...bad}})).valid);
+  assert.ok(validateEntry(sample({type:'walking',location})).valid);
+  assert.ok(!validateEntry(sample({distance:-1})).valid);assert.ok(!validateEntry(sample({elevation:1.5})).valid);
+});
+
 test('localDate uses local calendar components rather than UTC boundaries', () => {
   const input = new Date(2026, 0, 1, 0, 5);
   assert.equal(localDate(input), '2026-01-01');

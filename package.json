@@ -1,0 +1,14 @@
+{
+  "name": "moje-tempo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "python3 scripts/build_site.py",
+    "dev": "wrangler dev --local",
+    "test": "node --test tests/*.test.mjs",
+    "test:cloud": "python3 tests/cloud_smoke.py"
+  },
+  "devDependencies": {
+    "wrangler": "4.155.0"
+  }
+}
