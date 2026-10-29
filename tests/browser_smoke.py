@@ -7,13 +7,31 @@ import json
 import struct
 import zlib
 import time
+import platform
+import traceback
+from importlib.metadata import version
+from urllib.parse import urlsplit, urlunsplit
 
 BASE = os.environ.get('TEMPO_BASE_URL', 'http://127.0.0.1:8000').rstrip('/') + '/'
-_artifacts = tempfile.TemporaryDirectory(prefix='tempo-smoke-')
-OUT = Path(_artifacts.name)
+_artifacts = None
+_artifact_parent = os.environ.get('TEMPO_ARTIFACTS_DIR')
+if _artifact_parent:
+    Path(_artifact_parent).mkdir(parents=True, exist_ok=True)
+    OUT = Path(tempfile.mkdtemp(prefix='tempo-smoke-', dir=_artifact_parent))
+else:
+    _artifacts = tempfile.TemporaryDirectory(prefix='tempo-smoke-')
+    OUT = Path(_artifacts.name)
 checks = []
 pageerrors = []
 requests_failed = []
+
+def diagnostic_target(url):
+    parsed = urlsplit(url)
+    hostname = parsed.hostname or ''
+    if ':' in hostname:
+        hostname = '[' + hostname + ']'
+    host = hostname + (':' + str(parsed.port) if parsed.port is not None else '')
+    return urlunsplit((parsed.scheme, host, parsed.path, '', ''))
 
 def png_chunk(kind, payload):
     return struct.pack('>I', len(payload)) + kind + payload + struct.pack('>I', zlib.crc32(kind + payload) & 0xffffffff)
@@ -31,6 +49,7 @@ with sync_playwright() as p:
     if chromium:
         launch_options['executable_path'] = chromium
     browser = p.chromium.launch(**launch_options)
+    print(json.dumps({'runtime': {'python': platform.python_version(), 'playwright': version('playwright'), 'browser': browser.version, 'browser_selection': 'explicit executable' if chromium else 'Playwright bundled Chromium', 'target': diagnostic_target(BASE)}}, ensure_ascii=False), flush=True)
     context = browser.new_context(viewport={'width': 1440, 'height': 1000}, locale='cs-CZ', timezone_id='Europe/Prague', accept_downloads=True)
     page = context.new_page()
     page.on('pageerror', lambda e: pageerrors.append(str(e)))
@@ -258,8 +277,11 @@ with sync_playwright() as p:
         check('no browser JavaScript errors', not pageerrors, pageerrors)
         check('no failed asset requests', not requests_failed, requests_failed)
     except Exception as e:
-        checks.append({'name':'unhandled smoke exception','passed':False,'observed':repr(e)})
-        page.screenshot(path=str(OUT / 'failure.png'), full_page=True)
+        checks.append({'name':'unhandled smoke exception','passed':False,'observed':repr(e),'traceback':traceback.format_exc()})
+        try:
+            page.screenshot(path=str(OUT / 'failure.png'), full_page=True)
+        except Exception as screenshot_error:
+            print(json.dumps({'diagnostic':'Could not capture failure screenshot','error':repr(screenshot_error)},ensure_ascii=False),flush=True)
         print(json.dumps(checks[-1], ensure_ascii=False), flush=True)
     finally:
         context.close()
@@ -268,5 +290,8 @@ with sync_playwright() as p:
 report = {'passed':sum(c['passed'] for c in checks),'failed':sum(not c['passed'] for c in checks),'checks':checks,'pageerrors':pageerrors,'failed_requests':requests_failed}
 (OUT / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
 print(json.dumps({'passed':report['passed'],'failed':report['failed']},ensure_ascii=False))
-_artifacts.cleanup()
+if _artifacts is not None:
+    _artifacts.cleanup()
+else:
+    print(json.dumps({'artifacts_dir': str(OUT)}, ensure_ascii=False), flush=True)
 raise SystemExit(1 if report['failed'] else 0)

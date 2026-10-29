@@ -36,6 +36,7 @@ jobs:
         shell: bash
         env:
           TEMPO_BASE_URL: http://127.0.0.1:8000/hubnuti/
+          TEMPO_ARTIFACTS_DIR: ${{ runner.temp }}/tempo-browser-artifacts
         run: |
           set -euo pipefail
           tempo_serve_root="$(mktemp -d)"
@@ -56,9 +57,34 @@ jobs:
                       raise
                   time.sleep(0.1)
           PY
-          python3 tests/browser_smoke.py
+          set +e
+          python3 tests/browser_smoke.py > "$RUNNER_TEMP/tempo-browser-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-browser-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-browser-smoke.jsonl" --name "Packaged browser smoke" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
       - name: Test offline use and safe release updates
-        run: python3 tests/pwa_smoke.py
+        shell: bash
+        run: |
+          set +e
+          python3 tests/pwa_smoke.py > "$RUNNER_TEMP/tempo-pwa-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-pwa-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-pwa-smoke.jsonl" --name "Offline and update smoke" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
+      - name: Retain smoke-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-diagnostics
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/tempo-browser-smoke.jsonl
+            ${{ runner.temp }}/tempo-pwa-smoke.jsonl
+            ${{ runner.temp }}/tempo-server.log
+            ${{ runner.temp }}/tempo-browser-artifacts/
       - name: Upload tested public assets
         uses: actions/upload-pages-artifact@v3
         with:
@@ -67,6 +93,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
@@ -79,3 +107,38 @@ jobs:
       - name: Deploy verified application
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public-site browser verification tools
+        run: |
+          python3 -m pip install playwright==1.62.0
+          python3 -m playwright install --with-deps chromium
+      - name: Verify actual published Pages application
+        shell: bash
+        env:
+          TEMPO_BASE_URL: ${{ needs.deploy.outputs.page_url }}
+          TEMPO_ARTIFACTS_DIR: ${{ runner.temp }}/tempo-live-browser-artifacts
+        run: |
+          set +e
+          python3 tests/browser_smoke.py > "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-live-browser-smoke.jsonl" --name "Published Pages browser verification" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
+      - name: Retain public-site verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-site-verification-diagnostics
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/tempo-live-browser-smoke.jsonl
+            ${{ runner.temp }}/tempo-live-browser-artifacts/
