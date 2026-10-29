@@ -2,7 +2,11 @@
 
 Samostatná aplikace Moje tempo. Nepřipojuje se k účtům ani databázi trenérské aplikace.
 
-## Jednorázové dokončení v Cloudflare
+## Automatické nasazení
+
+`wrangler.toml` deklaruje vlastní doménu **moje.itfit.cz** pomocí `custom_domain = true` i samostatnou databázi **mojetempo-db**. Push do `main` spouští propojené Cloudflare Workers Builds. Při dostatečných oprávněních tokenu Wrangler vytvoří databázi a připojí doménu s DNS a HTTPS automaticky. Zóna `itfit.cz` musí být aktivní ve stejném Cloudflare účtu. GitHub Actions následně ověřují novou doménu, dostupnost D1 a inicializaci účtů; samotný úspěch místních testů není potvrzením produkčního nasazení.
+
+## Ruční dokončení, pokud nasazení zastaví chybějící oprávnění
 
 1. Otevři **Workers & Pages → mojetempo → Settings → Domains & Routes → Add → Custom Domain** a zadej **moje.itfit.cz**. Cloudflare připraví DNS a HTTPS, pokud je `itfit.cz` aktivní zónou ve stejném účtu. Pokud zóna v účtu není, průvodce nejdříve vyžádá její připojení. Pouhý DNS CNAME na Workers.dev nenahrazuje připojení Custom Domain k Workeru.
 2. V **Deployments** ověř úspěšné nasazení změn z `main`. Projekt používá `python3 scripts/build_site.py` a `npx wrangler deploy`. Wrangler 4.155.0 je připnutý v `package-lock.json` a při oprávněném prvním nasazení vytvoří databázi **mojetempo-db**, binding **DB**. Další nasazení znovu používají existující binding.

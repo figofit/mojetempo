@@ -16,6 +16,11 @@ with sync_playwright() as p:
                 if response is None or response.status!=200:raise AssertionError('HTTP '+str(response.status if response else 'no response'))
                 page.locator('#main-nav .nav-item').first.wait_for(timeout=10000)
                 if 'Moje tempo' not in page.title():raise AssertionError('Unexpected application title')
+                if os.environ.get('TEMPO_REQUIRE_DATABASE')=='1':
+                    status=page.request.get(base.rstrip('/')+'/api/status',timeout=10000)
+                    if status.status!=200 or status.json().get('available') is not True:raise AssertionError('Production D1 binding is not available')
+                    session=page.request.get(base.rstrip('/')+'/api/session',timeout=10000)
+                    if session.status!=200 or session.json()!={'user':None}:raise AssertionError('Production D1 account schema is not ready')
                 print('Published Moje tempo opens and initializes in Chromium.',flush=True)
                 break
             except Exception as error:

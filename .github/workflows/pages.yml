@@ -170,12 +170,13 @@ jobs:
           python3 -m playwright install --with-deps chromium
       - name: Wait for Cloudflare deployment in a real browser
         env:
-          TEMPO_BASE_URL: https://mojetempo.m-dokoupil69.workers.dev/
+          TEMPO_BASE_URL: https://moje.itfit.cz/
+          TEMPO_REQUIRE_DATABASE: '1'
         run: python3 scripts/verify_ready.py
       - name: Verify actual published Cloudflare application
         shell: bash
         env:
-          TEMPO_BASE_URL: https://mojetempo.m-dokoupil69.workers.dev/
+          TEMPO_BASE_URL: https://moje.itfit.cz/
           TEMPO_ARTIFACTS_DIR: ${{ runner.temp }}/tempo-live-browser-artifacts
         run: |
           set +e

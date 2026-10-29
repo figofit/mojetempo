@@ -87,7 +87,7 @@ Nastavení sestavení:
 
 Cloudflare po odeslání změn do `main` sestaví `dist` a zveřejní ho do existujícího Workeru `mojetempo`. Konfigurace zapíná adresu Workers.dev; skutečnou adresu převezmi z úspěšného nasazení v Cloudflare v části Domains. Nasazení není potvrzené, dokud build a deploy neskončí úspěšně a aplikace neprojde kontrolou na výsledné adrese.
 
-Cloudflare pro nasazení v prostředí Workers Builds používá svůj build token; automatické vytvoření D1 navíc vyžaduje oprávnění D1 Edit. Doménu **moje.itfit.cz** připoj v Cloudflare jako **Custom Domain** podle [DEPLOYMENT.md](DEPLOYMENT.md). Pro ruční nasazení z vývojového prostředí je potřeba bezpečně připojený účet, odpovídající API oprávnění a povolená síť k `api.cloudflare.com`. Přihlašovací údaje nepatří do repozitáře ani do chatu.
+Cloudflare pro nasazení v prostředí Workers Builds používá svůj build token; automatické vytvoření D1 navíc vyžaduje oprávnění D1 Edit. Konfigurace deklaruje doménu **moje.itfit.cz** jako **Custom Domain**, takže ji oprávněné nasazení připojí automaticky. Podmínky a případné ruční dokončení popisuje [DEPLOYMENT.md](DEPLOYMENT.md). Pro přímé nasazení z vývojového prostředí je potřeba bezpečně připojený účet, odpovídající API oprávnění a povolená síť k `api.cloudflare.com`. Přihlašovací údaje nepatří do repozitáře ani do chatu.
 
 V připraveném vývojovém prostředí je CLI `/workspace/tools/cloudflare/node_modules/.bin/wrangler` verze 4.155.0. Sestavení a konfiguraci lze ověřit bez přihlášení:
 
