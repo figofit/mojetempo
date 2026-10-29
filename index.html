@@ -3,285 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IT.fit()_body | nástěnka</title>
-    <meta
-      name="description"
-      content="Prolinkovaný placený průvodce pro lidi, kteří chtějí konečně začít hubnout, zesílit a rozvíjet postavu bez zbytečných extrémů."
-    />
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+    <meta name="theme-color" content="#176b5b" />
+    <meta name="description" content="Moje tempo — osobní deník pohybu, regenerace a malých vítězství." />
+    <title>Moje tempo — tvůj pohyb, tvůj příběh</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23176b5b'/%3E%3Cpath d='M8 23h7l4-12 5 20 4-8h5' fill='none' stroke='%23c5edb3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
   </head>
   <body>
-    <header class="hero" id="top">
-      <nav class="nav" aria-label="Hlavní navigace">
-        <a class="brand" href="#top">IT.fit()<span>_body</span></a>
-        <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button>
-        <div class="nav__links" id="nav-links">
-          <a href="#nastenka">hub()</a>
-          <a href="lekce/nastaveni.html">kcal()</a>
-          <a href="lekce/jidlo.html">jidlo()</a>
-          <a href="lekce/trenink.html">trenink()</a>
-          <a href="#zamky">vault()</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Hlavní navigace">
+        <a class="brand" href="#overview" aria-label="Moje tempo, přehled">
+          <span class="brand-mark"><svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M3 16h6l4-10 5 17 4-7h4" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span>moje tempo<span class="brand-subtitle">PROSTOR PRO TVŮJ POHYB</span></span>
+        </a>
+        <p class="eyebrow sidebar-label">MŮJ PROSTOR</p>
+        <nav class="nav-list" id="main-nav"></nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-note"><span class="tag">JEDEN DEN PO DRUHÉM</span><p>Nemusíš překonat ostatní.<br>Stačí najít svoje tempo.</p><svg viewBox="0 0 160 42" fill="none" aria-hidden="true"><path d="M0 33C25 33 14 6 39 15S58 41 77 21s22 13 40-2 26-8 43-15" stroke="#87b7a1" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <button class="nav-item" data-action="toggle-demo" id="demo-toggle"></button>
+          <button class="nav-item" data-view="settings" id="settings-nav"></button>
+          <div class="sidebar-profile"><span class="profile-avatar">MT</span><div><strong>Moje tempo</strong><small>Osobní deník · v tomto prohlížeči</small></div></div>
         </div>
-      </nav>
+      </aside>
+      <main class="main" id="main">
+        <header class="topbar"><span class="breadcrumb">Můj prostor <span aria-hidden="true">/</span> <strong id="breadcrumb-current">Přehled</strong></span><div class="topbar-actions"><span class="privacy-label" id="privacy-label"></span><button class="avatar icon-button" data-view="settings" aria-label="Cíle a nastavení">MT</button></div></header>
+        <div id="demo-banner"></div>
+        <div id="view-content" aria-live="polite"></div>
+      </main>
+    </div>
 
-      <section class="hero__grid">
-        <div>
-          <p class="eyebrow">ITFIT_BODY :: DASHBOARD</p>
-          <h1>body_rebuild()<span class="caret blink">_</span></h1>
-          <p class="lead">
-            Praktický webový průvodce pro začátečníky a mírně pokročilé: kalorie, kroky, silový trénink,
-            spánek, evidence jídla a chytré využití AI. Bez chaosu, bez extrémů, s důrazem na měřitelný progres.
-          </p>
-          <div class="hero__actions">
-            <a class="button button--primary" href="#kontrola">otevřít_nástěnku()</a>
-            <a class="button button--ghost" href="lekce/nastaveni.html">spočítat_kcal()</a>
-          </div>
+    <dialog id="entry-dialog" class="dialog" aria-labelledby="entry-heading">
+      <div class="dialog-header"><div><p class="eyebrow">DALŠÍ KROK V TVÉM PŘÍBĚHU</p><h2 id="entry-heading">Zapsat aktivitu</h2></div><button class="icon-button dialog-close" type="button" data-action="close-entry" aria-label="Zavřít">×</button></div>
+      <form id="entry-form" class="dialog-body">
+        <div class="form-grid">
+          <label class="form-field">Co se dnes povedlo?<select name="type" id="entry-type" required></select></label>
+          <label class="form-field">Datum<input name="date" id="entry-date" type="date" required /></label>
+          <label class="form-field" id="entry-duration-field">Délka v minutách<input name="duration" type="number" min="1" max="1440" step="1" placeholder="45" required /></label>
+          <label class="form-field" id="entry-steps-field">Počet kroků <span class="form-hint">nepovinné</span><input name="steps" type="number" min="0" max="200000" step="1" placeholder="Např. 6500" /><small class="form-hint">Kroky jen této aktivity, ne opakovaně celkový stav dne.</small></label>
         </div>
-        <aside class="score-card" aria-label="Rychlý přehled programu">
-          <span class="score-card__badge">CORE</span>
-          <h2>protocol_stack()</h2>
-          <ul>
-            <li>Deficit bez hladovění</li>
-            <li>Komplexní cviky místo izolací</li>
-            <li>Kroky a denní režim</li>
-            <li>Spánek, minerály, disciplína</li>
-          </ul>
-        </aside>
-      </section>
-    </header>
-
-    <main>
-      <section class="section dashboard" id="nastenka">
-        <div class="section__intro">
-          <p class="eyebrow">Úvodní nastavení a nástěnka</p>
-          <h2>Klient vidí, kde je, co má dělat dnes a kam pokračovat</h2>
-          <p>
-            Úvodní stránka funguje jako rozcestník členské zóny: nejdřív nastavit čísla, potom jídlo, trénink,
-            evidenci a regeneraci. Každý krok vede na samostatnou podstránku s konkrétním postupem.
-          </p>
-        </div>
-        <div class="dashboard__grid">
-          <a class="dashboard-card" href="lekce/nastaveni.html"><span>01</span><strong>kcal_makra()</strong><small>Výdej, deficit, bílkoviny, tuky, sacharidy.</small></a>
-          <a class="dashboard-card" href="lekce/jidlo.html"><span>02</span><strong>jidlo_aplikace()</strong><small>Kalorické tabulky, AI, etikety a plánování.</small></a>
-          <a class="dashboard-card" href="lekce/trenink.html"><span>03</span><strong>Silový plán</strong><small>A/B trénink, progrese, technika a zátěž.</small></a>
-          <a class="dashboard-card" href="lekce/evidence.html"><span>04</span><strong>evidence()</strong><small>Local storage, váha, obvody, fotky, kroky.</small></a>
-          <a class="dashboard-card" href="lekce/regenerace.html"><span>05</span><strong>Regenerace</strong><small>Spánek, stres, suplementy a udržitelnost.</small></a>
-        </div>
-      </section>
-
-
-      <section class="section" id="kontrola">
-        <div class="section__intro">
-          <p class="eyebrow">LOCAL_STORAGE :: DENNÍ KONTROLA</p>
-          <h2>Dnešní mise, návyky a rychlý zápis</h2>
-          <p>
-            Tohle je praktická nástěnka produktu: klient si uloží váhu, kroky, bílkoviny a odškrtne návyky.
-            Data zůstávají v prohlížeči přes localStorage, takže prototyp funguje i bez backendu.
-          </p>
-        </div>
-        <div class="habit-grid">
-          <form class="habit-card" id="daily-log-form">
-            <label>Ranní váha kg<input id="log-weight" type="number" step="0.1" placeholder="např. 84.6" /></label>
-            <label>Kroky dnes<input id="log-steps" type="number" step="100" placeholder="např. 8500" /></label>
-            <label>Bílkoviny g<input id="log-protein" type="number" placeholder="např. 155" /></label>
-            <label>Poznámka<textarea id="log-note" rows="3" placeholder="spánek, hlad, trénink, energie..."></textarea></label>
-            <button class="button button--primary" type="submit">uložit_dnešek()</button>
-          </form>
-          <aside class="habit-card">
-            <div class="tag">CHECKLIST</div>
-            <div class="habit-checks" id="habit-checks">
-              <label><input type="checkbox" data-habit="protein" /> bílkoviny splněny</label>
-              <label><input type="checkbox" data-habit="steps" /> kroky splněny</label>
-              <label><input type="checkbox" data-habit="training" /> trénink / chůze</label>
-              <label><input type="checkbox" data-habit="sleep" /> spánek 7h+</label>
-              <label><input type="checkbox" data-habit="tracked" /> zapsané jídlo</label>
-            </div>
-            <div class="macro-result" id="daily-summary">
-              <div><small>Váha</small><strong>—</strong><span>kg</span></div>
-              <div><small>Kroky</small><strong>—</strong><span>dnes</span></div>
-              <div><small>Protein</small><strong>—</strong><span>g</span></div>
-              <div><small>Návyky</small><strong>0/5</strong><span>splněno</span></div>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section class="section" id="start">
-        <div class="section__intro">
-          <p class="eyebrow">Start bez zkoušení naslepo</p>
-          <h2>První nastavení, které klientovi okamžitě řekne, co má dělat</h2>
-          <p>
-            Cílem není dát lidem další teorii. Cílem je přinutit je nastavit čísla, zapisovat realitu a po 14 dnech
-            upravit plán podle dat, ne podle pocitu po jednom horším víkendu.
-          </p>
-        </div>
-        <div class="cards cards--three">
-          <article class="card">
-            <span>01</span>
-            <h3>Kalorie</h3>
-            <p>Vypočítej udržovací příjem, nastav deficit 300–500 kcal a vysvětli, že 1 kg tuku je zhruba 8 000 kcal energie.</p>
-            <a href="#kalkulacka">Otevřít mini kalkulačku</a>
-          </article>
-          <article class="card">
-            <span>02</span>
-            <h3>Pohyb</h3>
-            <p>Začni kroky, ne trestem. Cíl je pravidelný výdej, který klient zvládne i v pracovním týdnu.</p>
-            <a href="#pohyb">Nastavit kroky</a>
-          </article>
-          <article class="card">
-            <span>03</span>
-            <h3>Silovka</h3>
-            <p>Komplexní cviky, postupné přidávání zátěže a svaly jako dlouhodobá investice do vyššího klidového výdeje.</p>
-            <a href="#trenink">Vybrat trénink</a>
-          </article>
-        </div>
-      </section>
-
-      <section class="section section--dark" id="system">
-        <div class="section__intro">
-          <p class="eyebrow">Prolinkovaný systém</p>
-          <h2>Mapa placeného produktu</h2>
-          <p>Každý modul vede klienta na další krok. Web může fungovat jako členská zóna, kde se lekce postupně odemykají.</p>
-        </div>
-        <div class="timeline">
-          <a href="lekce/nastaveni.html"><strong>Modul 1:</strong> výpočet příjmu, deficit a tempo hubnutí</a>
-          <a href="lekce/jidlo.html"><strong>Modul 2:</strong> potraviny, makra, evidence a AI kontrola jídelníčku</a>
-          <a href="lekce/trenink.html"><strong>Modul 3:</strong> silový plán A/B pro celé tělo</a>
-          <a href="lekce/regenerace.html"><strong>Modul 4:</strong> spánek, stres, vitamíny a minerály</a>
-          <a href="lekce/evidence.html"><strong>Modul 5:</strong> týdenní vyhodnocení a úpravy bez paniky</a>
-        </div>
-      </section>
-
-      <section class="section calculator" id="kalkulacka">
-        <div>
-          <p class="eyebrow">Interaktivní mustr</p>
-          <h2>Mini kalkulačka deficitu</h2>
-          <p>
-            Klient zadá svůj odhad udržovacího příjmu a zvolí deficit. Výsledek mu ukáže denní cíl a realistický čas pro
-            spálení 1 kg tuku při konzistentním postupu.
-          </p>
-        </div>
-        <form class="calc" id="deficit-form">
-          <label>
-            Udržovací příjem kcal/den
-            <input id="maintenance" type="number" min="1200" max="6000" value="2600" />
-          </label>
-          <label>
-            Denní deficit kcal
-            <input id="deficit" type="number" min="100" max="1000" step="50" value="400" />
-          </label>
-          <button class="button button--primary" type="submit">Spočítat plán</button>
-          <output class="calc__result" id="calc-result">Cíl: 2 200 kcal/den. 1 kg tuku ≈ 20 dní při deficitu 400 kcal.</output>
-        </form>
-      </section>
-
-      <section class="section split" id="trenink">
-        <div>
-          <p class="eyebrow">Silovák, ne lehké mávání</p>
-          <h2>Komplexní cviky pro začátečníky a mírně pokročilé</h2>
-          <p>
-            Trénink má být jednoduchý, opakovatelný a progresivní. Ne stavěný na izolovaných strojích, ale na vzorech:
-            dřep, tah, tlak, přítah, nošení a střed těla.
-          </p>
-        </div>
-        <div class="workout-grid">
-          <article>
-            <h3>Trénink A</h3>
-            <ul>
-              <li>Dřep / leg press jako přechod</li>
-              <li>Bench press nebo klik</li>
-              <li>Přítah v předklonu / jednoručka</li>
-              <li>Rumunský mrtvý tah</li>
-              <li>Farmářská chůze</li>
-            </ul>
-          </article>
-          <article>
-            <h3>Trénink B</h3>
-            <ul>
-              <li>Mrtvý tah technicky lehčí variantou</li>
-              <li>Tlak nad hlavu</li>
-              <li>Shyb / stahování kladky</li>
-              <li>Výpady nebo split squat</li>
-              <li>Plank a antirotace</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section class="section nutrition" id="jidlo">
-        <div class="section__intro">
-          <p class="eyebrow">Jídlo bez magie</p>
-          <h2>Evidence potravin, makra a AI jako osobní kontrolor</h2>
-        </div>
-        <div class="cards cards--four">
-          <article class="card"><h3>Bílkoviny</h3><p>Každé hlavní jídlo má obsahovat zdroj bílkovin, aby se držela sytost a svalová hmota.</p></article>
-          <article class="card"><h3>Kalorie</h3><p>Zapisuj potraviny podle gramáže, ne podle odhadu “asi normální porce”.</p></article>
-          <article class="card"><h3>AI prompt</h3><p>Nech AI zkontrolovat denní zápis: chybí vláknina, bílkoviny, zelenina, nebo je problém v tekutých kaloriích?</p></article>
-          <article class="card"><h3>Mikroživiny</h3><p>Základ: vitamín D dle sezóny a krevních testů, hořčík, omega-3, sůl a pitný režim podle zátěže.</p></article>
-        </div>
-      </section>
-
-      <section class="section split" id="pohyb">
-        <div>
-          <p class="eyebrow">Denní výdej</p>
-          <h2>Kroky jsou pojistka, ne náhrada silovky</h2>
-          <p>
-            Pro běžného klienta nastav start na aktuální průměr + 1 500 kroků. Když zvládá 14 dní po sobě, přidej další
-            úroveň. Web může automaticky posílat týdenní úkoly a připomínky.
-          </p>
-        </div>
-        <div class="metric-card">
-          <strong>Startovací cíle</strong>
-          <span>6 000 kroků</span>
-          <span>8 000 kroků</span>
-          <span>10 000 kroků</span>
-        </div>
-      </section>
-
-      <section class="section section--dark" id="regenerace">
-        <div class="section__intro">
-          <p class="eyebrow">Regenerace rozhoduje</p>
-          <h2>Spánek, stres, vitamíny a minerály</h2>
-          <p>
-            Pokud klient spí 5 hodin, honí práci a víkendově přejídá deficit, plán se nerozbije kvůli genetice, ale kvůli
-            systému. Modul učí večerní rutinu, plán jídla a kontrolu energie v týdnu.
-          </p>
-        </div>
-      </section>
-
-      <section class="section locked" id="zamky">
-        <div class="section__intro">
-          <p class="eyebrow">Placeno / členská zóna</p>
-          <h2>Zamčené lekce připravené k prodeji</h2>
-        </div>
-        <div class="locked__grid">
-          <article class="locked-card"><span>🔒</span><h3>Startovní audit klienta</h3><p>Dotazník, vstupní fotky, míry, kroky a jídelní záznam.</p></article>
-          <article class="locked-card"><span>🔒</span><h3>14denní rozjezd</h3><p>Konkrétní úkoly na každý den, aby člověk nezačal moc ostře a neshořel.</p></article>
-          <article class="locked-card"><span>🔒</span><h3>AI jídelní mentor</h3><p>Hotové prompty pro vyhodnocení jídelníčku, nákupní seznam a náhrady potravin.</p></article>
-          <article class="locked-card"><span>🔒</span><h3>Týdenní report</h3><p>Šablona pro váhu, obvody, fotky, kroky, tréninky a rozhodnutí, zda upravit kalorie.</p></article>
-        </div>
-      </section>
-
-      <section class="section cta" id="report">
-        <p class="eyebrow">Další krok</p>
-        <h2>Hotový základ pro produkt, který můžeš dál naplnit lekcemi</h2>
-        <p>
-          Tento mustr nastavuje tón: jasný, praktický, prodejní a zároveň odborný. Další iterace může doplnit login,
-          platební bránu, reálné lekce, videa a klientský dashboard.
-        </p>
-        <a class="button button--primary" href="#top">Zpět nahoru</a>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <p>© 2026 IT.fit()<span>_body</span> · Vzdělávací obsah nenahrazuje lékařskou péči.</p>
-      <a href="#top">Nahoru</a>
-    </footer>
-    <script src="app.js"></script>
-  <button id="toTop" aria-label="Zpět nahoru">↑</button>
+        <label class="form-field">Název momentu <span class="form-hint">nepovinné</span><input name="title" maxlength="120" placeholder="První návštěva Element Gymu…" /></label>
+        <fieldset class="mood-fieldset"><legend>Jak ses cítil/a? <span class="form-hint">nepovinné</span></legend><div class="mood-options" id="mood-options"></div></fieldset>
+        <div id="entry-chronicle-fields"><label class="form-field">Poznámka do kroniky<textarea name="note" rows="3" maxlength="3000" placeholder="Co ti udělalo radost? Co si chceš zapamatovat?"></textarea></label>
+        <label class="file-drop" for="entry-photo"><span id="photo-label">Přidat fotku k tomuhle momentu</span><small>JPG, PNG nebo WebP · nejvýše 10 MB</small><input id="entry-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" /></label><img id="photo-preview" class="photo-preview hidden" alt="Náhled vybrané fotografie" /></div>
+        <p class="form-error" id="entry-error" role="alert"></p>
+        <div class="form-actions"><button class="button secondary" type="button" data-action="close-entry">Zrušit</button><button class="button primary" id="save-entry" type="submit">Uložit aktivitu</button></div>
+      </form>
+    </dialog>
+    <input id="import-file" class="hidden" type="file" accept="application/json,.json" />
+    <div id="toast" class="toast hidden" role="status"></div>
+    <noscript><p>Pro zápis aktivit a statistiky prosím zapni JavaScript.</p></noscript>
   </body>
 </html>
