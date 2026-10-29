@@ -58,25 +58,29 @@ Aplikace je zveřejněná na **https://figofit.github.io/mojetempo/**. Nasazení
 
 V repozitáři na GitHubu nastav **Settings → Pages → Source → GitHub Actions**. Workflow `.github/workflows/pages.yml` po odeslání změn do větve `main` nebo ručním spuštění provede Node testy, sestavení, prohlížečové kontroly zabalené aplikace a `pwa_smoke.py`. Teprve po jejich úspěchu nasadí veřejné soubory do GitHub Pages. Výsledek ověř v běhu Actions a na cílové adrese. Publikování vývojového cloudového prostředí je samostatný krok a web na GitHub Pages nenasazuje.
 
-## Cloudflare Pages
+## Cloudflare Workers: automatické nasazení
 
-Cloudflare nasazení je připravené v `wrangler.toml`; k účtu zatím nebyl připojen přístup a veřejná adresa Cloudflare není potvrzená.
+Projekt `mojetempo` na Cloudflare používá Workers Builds propojené s repozitářem `figofit/mojetempo`. Konfigurace `wrangler.toml` publikuje hotové statické soubory přes Workers Static Assets; vlastní serverový skript není potřeba.
 
-Pro připojení přímo z Cloudflare vyber repozitář `figofit/mojetempo`, větev `main`, sestavovací příkaz `python3 scripts/build_site.py` a výstupní adresář `dist`. Žádné proměnné prostředí aplikace nejsou potřeba.
+Nastavení sestavení:
 
-Při přímém nahrání přes Wrangler musí být bezpečně nastavené `CLOUDFLARE_ACCOUNT_ID` a `CLOUDFLARE_API_TOKEN` s oprávněním Account → Cloudflare Pages → Edit pro vybraný účet. V cloudovém prostředí musí být také povolený přístup k `api.cloudflare.com`. Token patří do zabezpečeného nastavení, nikdy do Git repozitáře nebo chatu.
+- produkční větev: `main`
+- build command: `python3 scripts/build_site.py`
+- deploy command: `npx wrangler deploy`
+- root directory: kořen repozitáře
+
+Cloudflare po odeslání změn do `main` sestaví `dist` a zveřejní ho do existujícího Workeru `mojetempo`. Konfigurace zapíná adresu Workers.dev; skutečnou adresu převezmi z úspěšného nasazení v Cloudflare v části Domains. Nasazení není potvrzené, dokud build a deploy neskončí úspěšně a aplikace neprojde kontrolou na výsledné adrese.
+
+Cloudflare pro nasazení v prostředí Workers Builds používá svůj build token. Pro ruční nasazení z cloudového vývojového prostředí je naopak potřeba bezpečně připojený účet, API token s oprávněním pro úpravu Workers a povolená síť k `api.cloudflare.com`. Přihlašovací údaje nepatří do repozitáře ani do chatu.
+
+V připraveném vývojovém prostředí je CLI `/workspace/tools/cloudflare/node_modules/.bin/wrangler` verze 4.155.0. Sestavení a konfiguraci lze ověřit bez přihlášení:
 
 ```sh
 python3 scripts/build_site.py
-wrangler pages project list
-# Vytvoř nový projekt, pokud tento název ještě není používaný jinou aplikací:
-wrangler pages project create figofit-mojetempo --production-branch main
-wrangler pages deploy dist --project-name figofit-mojetempo --branch main
+WRANGLER_SEND_METRICS=false XDG_CONFIG_HOME=/workspace/.config /workspace/tools/cloudflare/node_modules/.bin/wrangler deploy --dry-run
 ```
 
-Cloudové prostředí má připravený Wrangler 4.155.0 v `/workspace/tools/cloudflare/node_modules/.bin/wrangler`. Pro neinteraktivní použití vypni telemetrii pomocí `WRANGLER_SEND_METRICS=false`; místní konfigurace může používat `XDG_CONFIG_HOME=/workspace/.config`. Před zápisem zkontroluj, že vybraný účet i projekt patří této aplikaci. Doménu používej až podle potvrzeného výsledku nasazení.
-
-Pro ruční nahrání je možné zabalit obsah `dist` do ZIP a použít Cloudflare Workers & Pages → Create application → Pages → Upload assets. ZIP musí mít `index.html` přímo v kořeni. Změna na doménu Cloudflare používá nové úložiště prohlížeče; existující deník přenes úplnou JSON zálohou.
+Změna na novou doménu používá nové úložiště prohlížeče; existující deník přenes úplnou JSON zálohou. GitHub Pages zůstává samostatným nasazením stejné aplikace.
 
 ## Telefon, offline režim a aktualizace
 
