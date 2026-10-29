@@ -52,9 +52,9 @@ Testy používají izolovaný prohlížeč a dočasná data. Pro jiný server na
 python3 scripts/build_site.py
 ```
 
-Příkaz připraví `dist/` s výslovně povolenými veřejnými soubory aplikace, ikonami, manifestem a service workerem. Nepublikuje celý repozitář, testy ani dokumentaci. Do sestavení doplní verzi pro offline mezipaměť. Publikuje se pouze obsah `dist/`; manifest a relativní odkazy podporují také projektovou cestu `/hubnuti/`.
+Příkaz připraví `dist/` s výslovně povolenými veřejnými soubory aplikace, ikonami, manifestem a service workerem. Nepublikuje celý repozitář, testy ani dokumentaci. Do sestavení doplní verzi pro offline mezipaměť. Publikuje se pouze obsah `dist/`; manifest a relativní odkazy podporují také projektovou cestu `/mojetempo/`.
 
-Cílová adresa nasazení je **https://figofit.github.io/hubnuti/**. Její dostupnost zatím není potvrzena.
+Aplikace je zveřejněná na **https://figofit.github.io/mojetempo/**. Nasazení i prohlížečová kontrola skutečné veřejné aplikace prošly v [běhu GitHub Actions](https://github.com/figofit/mojetempo/actions/runs/40873717434).
 
 V repozitáři na GitHubu nastav **Settings → Pages → Source → GitHub Actions**. Workflow `.github/workflows/pages.yml` po odeslání změn do větve `main` nebo ručním spuštění provede Node testy, sestavení, prohlížečové kontroly zabalené aplikace a `pwa_smoke.py`. Teprve po jejich úspěchu nasadí veřejné soubory do GitHub Pages. Výsledek ověř v běhu Actions a na cílové adrese. Publikování vývojového cloudového prostředí je samostatný krok a web na GitHub Pages nenasazuje.
 
@@ -86,4 +86,4 @@ Prototyp zatím nemá uživatelské účty, automatický přenos mezi zařízen�
 4. Nabídnout lidem vlastní výběr modulů, cíle a přehledy.
 5. Doplnit přímé propojení s Google Kalendářem s výslovným souhlasem uživatele.
 
-Repozitář `figofit/hubnuti` může sloužit i tomuto novému projektu; nový repozitář není potřeba. Stejný GitHub repozitář lze otevřít ve Windows aplikaci Codex. Změny ve zdrojovém kódu a místní data deníku jsou dvě různé věci: Git nepřenáší obsah úložiště prohlížeče.
+Zdrojový kód je v repozitáři `figofit/mojetempo`. Stejný GitHub repozitář lze otevřít ve Windows aplikaci Codex. Místní adresář cloudového prostředí zůstává `/workspace/hubnuti`. Změny ve zdrojovém kódu a místní data deníku jsou dvě různé věci: Git nepřenáší obsah úložiště prohlížeče.
