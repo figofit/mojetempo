@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
     command=[executable] if Path(executable).is_file() else ['npx','--yes','wrangler@4.155.0']
     environment={**os.environ,'WRANGLER_SEND_METRICS':'false','XDG_CONFIG_HOME':str(Path(temporary)/'config')}
     with (Path(temporary)/'worker.log').open('w+') as log:
-        process=subprocess.Popen([*command,'dev','--local','--ip','127.0.0.1','--port',str(port),'--persist-to',str(Path(temporary)/'db')],cwd=ROOT,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+        process=subprocess.Popen([*command,'dev','--env','local','--local','--ip','127.0.0.1','--port',str(port),'--persist-to',str(Path(temporary)/'db')],cwd=ROOT,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         try:
             for attempt in range(120):
                 try:

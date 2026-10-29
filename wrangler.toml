@@ -23,3 +23,12 @@ binding = "ASSETS"
 run_worker_first = ["/api/*", "/", "/index.html"]
 html_handling = "auto-trailing-slash"
 not_found_handling = "none"
+
+# Local requests must retain their actual localhost origin for cookie/CSRF checks.
+# Production Custom Domains otherwise rewrite that origin in Wrangler dev.
+[env.local]
+routes = []
+
+[[env.local.d1_databases]]
+binding = "DB"
+database_name = "mojetempo-db"
