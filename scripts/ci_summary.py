@@ -61,6 +61,29 @@ def summarize(log: str, name: str, exit_code: int) -> str:
     return "\n".join(output)
 
 
+def public_failure(log: str, name: str) -> str:
+    """Short synthetic test diagnostic, visible without access to private job logs."""
+    checks, unstructured = [], []
+    for line in log.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            if line.strip():
+                unstructured.append(line.strip())
+            continue
+        if isinstance(item, dict) and 'name' in item and isinstance(item.get('passed'), bool):
+            checks.append(item)
+    failed = [item for item in checks if not item['passed']]
+    if failed:
+        item = failed[0]
+        detail = str(item['name']) + ': ' + json.dumps(item.get('observed'), ensure_ascii=False)
+    else:
+        detail = ('Last completed: ' + str(checks[-1]['name']) + '. ') if checks else 'No completed checks. '
+        detail += ' '.join(unstructured[-12:])
+    message = (name + ': ' + detail)[:1600]
+    return '::error title=Moje tempo verification::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log", type=Path, required=True)
@@ -71,6 +94,8 @@ def main() -> int:
     try:
         log = args.log.read_text(encoding="utf-8", errors="replace")
         summary = summarize(log, args.name, args.exit_code)
+        if args.exit_code:
+            print(public_failure(log, args.name), flush=True)
         target = args.output or (Path(os.environ["GITHUB_STEP_SUMMARY"]) if os.environ.get("GITHUB_STEP_SUMMARY") else None)
         if target is None:
             sys.stdout.write(summary)
