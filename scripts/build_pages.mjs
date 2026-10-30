@@ -1,5 +1,4 @@
 /** Pure packaging: a Pages advanced-mode Worker and the allowlisted public shell. */
-import {build} from 'esbuild';
 import {cp,mkdtemp,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -12,6 +11,9 @@ export function buildPublic() {
   if(result.status!==0)throw new Error('Sestavení veřejné aplikace selhalo.');
 }
 export async function preparePages() {
+  // Load deployment dependencies inside the reported build step, so missing
+  // packages produce our readable diagnostic rather than an uncaught import.
+  const {build}=await import('esbuild');
   const directory=await mkdtemp(join(tmpdir(),'moje-tempo-pages-'));
   const publicDir=join(directory,'public');
   await cp(join(ROOT,'dist'),publicDir,{recursive:true});

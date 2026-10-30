@@ -16,6 +16,8 @@ Existující **Workers Builds → mojetempo** dál sleduje GitHub `figofit/mojet
 
 Nasazovací token potřebuje vedle současných práv také **Account → Cloudflare Pages → Edit** a **Account → D1 → Edit**. Automaticky vytvořený token Workers Builds je nemusí obsahovat. Při HTTP 403 nebo chybě přístupů se nasazení zastaví a vypíše konkrétní API operaci a kód chyby, nikdy token. Oprávnění lze doplnit v Cloudflare **My Profile → API Tokens → příslušný build token → Edit** a nasazení opakovat. Hodnoty tokenů nepatří do repozitáře ani chatu.
 
+Původní příčinu hledej na řádku **`MOJE_TEMPO_DEPLOY_ERROR`**, nikoliv až v souhrnné hlášce Wrangleru `Running custom build failed`. Například `GET /pages/projects/...: HTTP 403, kód 10000` znamená, že token nemá přístup k Pages v daném účtu; ověř **Cloudflare Pages → Edit**. Chyba na `/d1/...` směřuje na oprávnění D1. Pokud není předané ID účtu, skript ho zkusí zjistit standardním `wrangler whoami --json`; při více účtech vyžaduje výslovné `CLOUDFLARE_ACCOUNT_ID` a žádný účet nevybírá odhadem.
+
 `npm run build` a `npm run build:pages` jsou čistě místní sestavení a nevytvářejí vzdálené prostředky. `npm run build:pages` vypíše cestu k připravenému dočasnému adresáři pro Pages. Vývoj používá `npm run dev` a samostatné prostředí `local`.
 
 ## CNAME u registrátora
