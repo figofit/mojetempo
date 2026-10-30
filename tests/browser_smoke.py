@@ -104,6 +104,7 @@ with sync_playwright() as p:
             return [message]
 
         page.goto(BASE, wait_until='networkidle')
+        page.locator('#main-nav .nav-item').first.wait_for(state='visible')
         check('initial demo clearly labeled', page.locator('#demo-banner').inner_text().find('ukázkový deník') >= 0 and page.locator('.nav-count').inner_text() != '0', page.locator('#demo-banner').inner_text())
         check('demo entries are not own records', state() is None, state())
         page.locator('[data-action="start-own"]').click()
