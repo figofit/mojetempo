@@ -16,6 +16,7 @@ async function request(path,options={}) {
   return response;
 }
 const api=async(path,options)=> (await request(path,options)).json();
+export const loadAdminOverview=(offset=0)=>api(`admin/overview?offset=${encodeURIComponent(offset)}`);
 export async function initializeAccount() {
   const previous=await local.getValue('active-account');
   try {
@@ -82,6 +83,7 @@ export async function syncCloud() {
         // A cookie might belong to a different account after a login in another tab.
         const actual=(await api('session')).user;
         if(actual?.id!==owner)throw new APIError(401,'Přihlášení se změnilo. Přihlas se znovu ke správnému účtu.');
+        if(actual.role!==user.role){user=actual;await local.setValue('active-account',user);}
         const remote=await api('diary');
         const record=await local.mutateValue(key(owner),current=>{
           if(!current)return {state:remote.state,base:remote.state,revision:remote.revision,dirty:false};

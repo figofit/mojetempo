@@ -1,6 +1,7 @@
-import { DEFAULT_SETTINGS } from './domain.mjs';
+import { DEFAULT_SETTINGS, librarySettings } from './domain.mjs';
+import { planningSettings } from './planning.mjs';
 
-export const emptyDiary = () => ({version:1,entries:[],settings:{...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]},onboardingComplete:false});
+export const emptyDiary = () => ({version:1,entries:[],settings:{...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules],favoriteExercises:[],customExercises:[],weeklyPlan:[],planChecks:[]},onboardingComplete:false});
 // Stable equality ignores property insertion order (JSON round trips / old backups).
 export function same(a,b) {
   if(a===b) return true;
@@ -14,6 +15,14 @@ function mergeValue(base,local,remote) {
   if(same(remote,base)||same(local,remote)) return local;
   throw new Error('Stejný údaj byl změněn na dvou zařízeních. Stáhni zálohu tohoto deníku a načti verzi z účtu.');
 }
+function mergeCollection(base=[],local=[],remote=[]) {
+  const [b,l,r]=[base,local,remote].map(items=>new Map(items.map(item=>[item.id,item]))),output=[];
+  for(const id of new Set([...b.keys(),...l.keys(),...r.keys()])) {
+    const value=mergeValue(b.get(id),l.get(id),r.get(id));
+    if(value)output.push(value);
+  }
+  return output;
+}
 /** Three-way merge preserves independent additions and deletions; never guesses on a conflict. */
 export function mergeDiaries(base,local,remote) {
   base=base||emptyDiary();local=local||emptyDiary();remote=remote||emptyDiary();
@@ -24,6 +33,25 @@ export function mergeDiaries(base,local,remote) {
     if(entry) entries.push(entry);
   }
   const settings={};
-  for(const key of Object.keys(DEFAULT_SETTINGS)) settings[key]=mergeValue(base.settings[key]??DEFAULT_SETTINGS[key],local.settings[key]??DEFAULT_SETTINGS[key],remote.settings[key]??DEFAULT_SETTINGS[key]);
+  for(const key of Object.keys(DEFAULT_SETTINGS)) {
+    if(['favoriteExercises','customExercises','weeklyPlan','planChecks'].includes(key))continue;
+    settings[key]=mergeValue(base.settings[key]??DEFAULT_SETTINGS[key],local.settings[key]??DEFAULT_SETTINGS[key],remote.settings[key]??DEFAULT_SETTINGS[key]);
+  }
+  // Collections merge by identity, so favoriting different exercises on two devices
+  // does not cause a conflict. Concurrent edits of the same custom exercise still do.
+  const libraries=[base,local,remote].map(diary=>librarySettings(diary.settings));
+  const [cb,cl,cr]=libraries.map(library=>new Map(library.customExercises.map(exercise=>[exercise.id,exercise])));
+  settings.customExercises=[];
+  for(const id of new Set([...cb.keys(),...cl.keys(),...cr.keys()])) {
+    const exercise=mergeValue(cb.get(id),cl.get(id),cr.get(id));
+    if(exercise)settings.customExercises.push(exercise);
+  }
+  const [fb,fl,fr]=libraries.map(library=>new Set(library.favoriteExercises));
+  settings.favoriteExercises=[];
+  const removedCustom=new Set([...cb.keys(),...cl.keys(),...cr.keys()].filter(id=>!settings.customExercises.some(exercise=>exercise.id===id)));
+  for(const id of new Set([...fb,...fl,...fr]))if(!removedCustom.has(id)&&mergeValue(fb.has(id),fl.has(id),fr.has(id)))settings.favoriteExercises.push(id);
+  Object.assign(settings,librarySettings(settings));
+  for(const key of ['weeklyPlan','planChecks'])settings[key]=mergeCollection(base.settings[key],local.settings[key],remote.settings[key]);
+  Object.assign(settings,planningSettings(settings));
   return {version:1,entries,settings,onboardingComplete:local.onboardingComplete||remote.onboardingComplete};
 }

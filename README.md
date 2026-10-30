@@ -2,11 +2,16 @@
 
 Osobní deník pohybu a regenerace. Místo, kde si snadno zaznamenáš posilovnu, domácí trénink, kolo, chůzi, kroky, saunu nebo odpočinek a uvidíš, jak se ti daří v čase.
 
-Cílová adresa je **https://moje.itfit.cz/**. Jde o nezávislou aplikaci bez propojení s trenérskou databází. Připojení vlastní domény a produkční D1 popisuje [DEPLOYMENT.md](DEPLOYMENT.md); jejich aktivace zatím není z tohoto vývojového prostředí potvrzená.
+Aplikace běží na **https://moje.itfit.cz/** s HTTPS a vlastní databází D1. Jde o nezávislou aplikaci bez propojení s trenérskou databází. Nasazení a přístup k D1 byly ověřeny v [automatické kontrole](https://github.com/figofit/mojetempo/actions/runs/41035622578); konfiguraci popisuje [DEPLOYMENT.md](DEPLOYMENT.md).
 
 První verze slouží k ověření každodenního používání. Navazuje na záměr vytvořit později aplikaci pro další lidi, kteří si zapnou jen moduly, které chtějí používat.
 
-## Co prototyp nabízí
+## Co aplikace nabízí
+
+- Přehled **Dnes** s rychlým zápisem pohybu a doplněním včerejších kroků.
+- **Můj plán**: vlastní opakovaný týden pro kolo, fitko, bazén, odpočinek, práci i libovolné priority. Odškrtnutí plánu je samostatné; do statistik pohybu vstupují skutečné zápisy.
+- Knihovnu 24 cviků s filtry, oblíbenými a vlastními cviky. Při přidání se předvyplní hlavní pohybový vzor a poslední počet pracovních sérií.
+- Bezpečnou [roli správce](docs/admin-access.md) přiřazenou konkrétnímu ID účtu. Správce vidí metadata účtů a souhrn využití, nikoliv obsah osobních deníků.
 
 - Zápis aktivit s datem, délkou, kroky, poznámkou a pocitem po aktivitě.
 - Výšlapy a turistiku, vzdálenost a nastoupané metry ve statistikách i exportech.
@@ -58,6 +63,7 @@ V připraveném cloudovém prostředí je dostupný Playwright a Chromium. Prvn�
 ```sh
 python3 tests/browser_smoke.py
 python3 tests/pwa_smoke.py
+python3 tests/daily_tools_smoke.py
 python3 tests/cloud_smoke.py
 TEMPO_RUNTIME=pages python3 tests/cloud_smoke.py
 ```
@@ -134,7 +140,7 @@ Připravené účty a synchronizace fungují na nasazení s připojenou D1; čis
 
 1. Používat vlastní deník a upravit rychlost zápisu, cíle a statistiky podle skutečné potřeby.
 2. Ověřit přenos záloh na skutečných zařízeních a rozvíjet práci s větší kronikou.
-3. Dokončit produkční doménu a D1, ověřit reálné telefony, zálohy a obnovu účtu.
+3. Průběžně ověřovat reálné telefony, zálohy a obnovu účtu.
 4. Nabídnout lidem vlastní výběr modulů, cíle a přehledy.
 5. Doplnit přímé propojení s Google Kalendářem s výslovným souhlasem uživatele.
 

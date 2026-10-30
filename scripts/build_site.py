@@ -28,6 +28,7 @@ PUBLIC_FILES = (
     "local-storage.mjs",
     "sync-rules.mjs",
     "places.mjs",
+    "planning.mjs",
     "vendor/leaflet/leaflet.js",
     "vendor/leaflet/leaflet.css",
     "vendor/leaflet/LICENSE",

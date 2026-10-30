@@ -38,6 +38,71 @@ export const MOVEMENT_PATTERNS = Object.freeze([
   {id:'other',label:'Jiný / izolovaný cvik',short:'Ostatní',group:'other'},
 ]);
 
+/** Each exercise has one primary pattern, so adding it never doubles its volume. */
+export const EXERCISE_CATALOG = Object.freeze([
+  {id:'goblet-squat',name:'Goblet dřep',pattern:'squat'},
+  {id:'back-squat',name:'Dřep s osou',pattern:'squat'},
+  {id:'bulgarian-squat',name:'Bulharský dřep',pattern:'squat'},
+  {id:'reverse-lunge',name:'Výpad vzad',pattern:'squat'},
+  {id:'leg-press',name:'Leg press',pattern:'squat'},
+  {id:'romanian-deadlift',name:'Rumunský mrtvý tah',pattern:'hinge'},
+  {id:'deadlift',name:'Mrtvý tah',pattern:'hinge'},
+  {id:'hip-thrust',name:'Hip thrust',pattern:'hinge'},
+  {id:'bench-press',name:'Bench press',pattern:'horizontal_push'},
+  {id:'dumbbell-press',name:'Tlaky s jednoručkami vleže',pattern:'horizontal_push'},
+  {id:'push-up',name:'Klik',pattern:'horizontal_push'},
+  {id:'dumbbell-row',name:'Přítah jednoručky',pattern:'horizontal_pull'},
+  {id:'cable-row',name:'Přítah kladky vsedě',pattern:'horizontal_pull'},
+  {id:'chest-supported-row',name:'Přítahy s oporou hrudníku',pattern:'horizontal_pull'},
+  {id:'overhead-press',name:'Tlaky nad hlavu',pattern:'vertical_push'},
+  {id:'pull-up',name:'Shyb',pattern:'vertical_pull'},
+  {id:'lat-pulldown',name:'Stahování horní kladky',pattern:'vertical_pull'},
+  {id:'plank',name:'Plank',pattern:'core'},
+  {id:'dead-bug',name:'Dead bug',pattern:'core'},
+  {id:'pallof-press',name:'Pallof press',pattern:'core'},
+  {id:'side-plank',name:'Boční plank',pattern:'core'},
+  {id:'farmer-carry',name:'Farmářská chůze',pattern:'carry'},
+  {id:'biceps-curl',name:'Bicepsový zdvih',pattern:'other'},
+  {id:'triceps-extension',name:'Tricepsová extenze',pattern:'other'},
+].map(Object.freeze));
+
+/** Strict shared validation for local backups and remote snapshots; old diaries default empty. */
+export function librarySettings(input={}) {
+  input=input&&typeof input==='object'?input:{};
+  const custom=input.customExercises===undefined?[]:input.customExercises;
+  const favorites=input.favoriteExercises===undefined?[]:input.favoriteExercises;
+  if(!Array.isArray(custom)||custom.length>100)throw new Error('Knihovna může mít nejvýše 100 vlastních cviků.');
+  const ids=new Set(EXERCISE_CATALOG.map(exercise=>exercise.id)),customExercises=[];
+  for(const exercise of custom) {
+    if(!exercise||typeof exercise!=='object'||typeof exercise.id!=='string'||!/^custom-[A-Za-z0-9-]{1,80}$/.test(exercise.id)||ids.has(exercise.id)||typeof exercise.name!=='string'||!exercise.name.trim()||exercise.name.trim().length>100||!MOVEMENT_PATTERNS.some(pattern=>pattern.id===exercise.pattern))throw new Error('Vlastní cvik potřebuje jedinečné ID, název do 100 znaků a platný pohybový vzor.');
+    ids.add(exercise.id);customExercises.push({id:exercise.id,name:exercise.name.trim(),pattern:exercise.pattern});
+  }
+  if(!Array.isArray(favorites)||favorites.length>ids.size||favorites.some(id=>typeof id!=='string'||!ids.has(id))||new Set(favorites).size!==favorites.length)throw new Error('Oblíbené cviky musí odkazovat na jedinečné cviky z knihovny.');
+  return {favoriteExercises:[...favorites],customExercises};
+}
+
+export function exerciseLibrary(settings={}) {
+  return [...EXERCISE_CATALOG,...librarySettings(settings).customExercises];
+}
+
+/** Named UI filters operate on primary patterns; carry belongs with the core group. */
+export function filterExercises(exercises,filter='all',favoriteIds=[]) {
+  const favorites=new Set(favoriteIds);
+  return exercises.filter(exercise=>filter==='all'||filter==='favorites'&&favorites.has(exercise.id)||filter==='lower'&&['squat','hinge'].includes(exercise.pattern)||filter==='upper'&&['horizontal_push','horizontal_pull','vertical_push','vertical_pull','other'].includes(exercise.pattern)||filter==='core'&&['core','carry'].includes(exercise.pattern));
+}
+
+/** Last actual working sets, excluding the entry being edited and later calendar dates. */
+export function lastExerciseUse(entries=[],exercise,{beforeDate=localDate(),excludeEntryId}={}) {
+  const normalize=name=>String(name||'').trim().toLocaleLowerCase('cs-CZ').replace(/\s+/g,' ');
+  if(!exercise||!normalize(exercise.name)||!parseDate(beforeDate))return null;
+  const eligible=(Array.isArray(entries)?entries:[]).filter(entry=>entry&&entry.id!==excludeEntryId&&['strength','home'].includes(entry.type)&&parseDate(entry.date)&&entry.date<=beforeDate).sort((a,b)=>b.date.localeCompare(a.date)||String(b.createdAt||'').localeCompare(String(a.createdAt||''))||String(b.id).localeCompare(String(a.id)));
+  for(const entry of eligible) {
+    const recorded=entry.workout?.exercises?.filter(row=>row&&row.pattern===exercise.pattern&&normalize(row.name)===normalize(exercise.name)&&Number.isInteger(row.sets)&&row.sets>=1&&row.sets<=50)||[];
+    if(recorded.length)return {date:entry.date,sets:recorded.reduce((total,row)=>total+row.sets,0),entryId:entry.id};
+  }
+  return null;
+}
+
 export function strengthTargets(input={}) {
   const output={};
   for(const key of ['strengthPullPerPush','strengthHingePerSquat']) {
@@ -57,6 +122,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dailySteps: 8000,
   strengthPullPerPush: 1,
   strengthHingePerSquat: 1,
+  favoriteExercises: Object.freeze([]),
+  customExercises: Object.freeze([]),
+  weeklyPlan: Object.freeze([]),
+  planChecks: Object.freeze([]),
 });
 
 const typeById = new Map(ACTIVITY_TYPES.map((type) => [type.id, type]));

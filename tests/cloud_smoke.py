@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 if phone.locator('[data-action="start-own"]').count():phone.locator('[data-action="start-own"]').click()
                 phone.locator('[data-action="add"]').first.click();phone.locator('#entry-type').select_option('hiking')
                 phone.locator('[name="duration"]').fill('120');phone.locator('[name="distance"]').fill('8.5');phone.locator('[name="elevation"]').fill('420');phone.locator('[name="title"]').fill('Výšlap na Praděd')
-                phone.locator('#place-query').fill('Praděd');phone.locator('.place-fields details').evaluate('(el)=>el.open=true')
+                phone.locator('#place-query').fill('Praděd');phone.locator('#place-coordinates').evaluate('(el)=>el.open=true')
                 phone.locator('#place-latitude').fill('50.083');phone.locator('#place-longitude').fill('17.231')
                 # Use a browser-produced valid image so photo processing and byte preservation are real.
                 photo=run(phone,"""async()=>{const c=document.createElement('canvas');c.width=8;c.height=8;c.getContext('2d').fillRect(0,0,8,8);return c.toDataURL().split(',')[1]}""")
@@ -157,11 +157,40 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 phone.locator('#save-entry').click();phone.locator('#entry-dialog').wait_for(state='hidden');sync(phone);sync(windows)
                 modified=next(entry for entry in state(windows)['entries'] if entry['id']==strength_entry['id'])
                 check('custom split names and removing an exercise survive sync',modified['workout']['splitName']=='Záda + biceps' and len(modified['workout']['exercises'])==3)
+
+                # Library and recurring plans belong to the same private account.
+                # Use the real adapter/D1 while keeping test choices local to these profiles.
+                planning=run(phone,"""()=>{
+                  const today=new Date(),date=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+                  return {date,weekday:(today.getDay()+6)%7};
+                }""")
+                plan={'id':'plan-phone-workout','weekday':planning['weekday'],'label':'Můj vlastní trénink','type':'strength'}
+                custom_phone={'id':'custom-phone-squat','name':'Dřep s mojí kettlebell','pattern':'squat'}
+                custom_windows={'id':'custom-windows-row','name':'Přítah na mém stroji','pattern':'horizontal_pull'}
+                storage(phone,'await s.updateState(d=>({...d,settings:{...d.settings,weeklyPlan:[arg.plan],customExercises:[arg.exercise],favoriteExercises:["goblet-squat",arg.exercise.id]}}))',{'plan':plan,'exercise':custom_phone})
+                sync(phone);sync(windows)
+                received=state(windows)['settings']
+                check('personal exercise library favorites and recurring plan synchronize from phone to Windows',received['weeklyPlan']==[plan] and received['customExercises']==[custom_phone] and set(received['favoriteExercises'])=={'goblet-squat',custom_phone['id']} and received['strengthPullPerPush']==2)
+
+                sync(phone);sync(windows);contexts[0].set_offline(True);contexts[1].set_offline(True)
+                storage(phone,'const p=await import("./planning.mjs");await s.updateState(d=>({...d,settings:{...d.settings,...p.togglePlanCheck(d.settings,arg.planId,arg.date),favoriteExercises:[...d.settings.favoriteExercises,"dead-bug"]}}))',{'planId':plan['id'],'date':planning['date']})
+                storage(windows,'await s.updateState(d=>({...d,settings:{...d.settings,customExercises:[...d.settings.customExercises,arg],favoriteExercises:[...d.settings.favoriteExercises,"bench-press",arg.id]}}))',custom_windows)
+                check('phone can mark its plan complete offline while Windows changes its exercise library',len(state(phone)['settings']['planChecks'])==1 and len(state(windows)['settings']['customExercises'])==2)
+                contexts[0].set_offline(False);contexts[1].set_offline(False)
+                sync(phone);sync(windows);sync(phone)
+                expected_favorites={'goblet-squat',custom_phone['id'],'dead-bug','bench-press',custom_windows['id']}
+                paired=[state(page)['settings'] for page in [phone,windows]]
+                check('independent offline favorites custom exercises and plan completion merge on both devices',all(set(item['favoriteExercises'])==expected_favorites and item['customExercises']==[custom_phone,custom_windows] and item['weeklyPlan']==[plan] and item['planChecks']==[{'id':planning['date']+':'+plan['id'],'date':planning['date'],'planId':plan['id']}] for item in paired))
+                # A fresh page load proves server state is retained beyond the open UI.
+                windows.reload()
+                windows.locator('#account-profile').filter(has_text=login).wait_for()
+                sync(windows)
+                check('Windows reload keeps the same private plan library and completed day',state(windows)['settings']['planChecks']==paired[0]['planChecks'] and set(state(windows)['settings']['favoriteExercises'])==expected_favorites)
                 phone.goto(base+'/#settings')
                 with phone.expect_download() as download:
                     phone.locator('[data-action="backup"]').click()
                 backup_path=Path(temporary)/'strength-backup.json';download.value.save_as(str(backup_path));backup=json.loads(backup_path.read_text())
-                check('complete backup preserves workout details and custom strength targets',next(entry for entry in backup['entries'] if entry['id']==strength_entry['id'])['workout']==modified['workout'] and backup['settings']['strengthPullPerPush']==2)
+                check('complete backup preserves workout details targets personal library and weekly plan',next(entry for entry in backup['entries'] if entry['id']==strength_entry['id'])['workout']==modified['workout'] and backup['settings']['strengthPullPerPush']==2 and set(backup['settings']['favoriteExercises'])==expected_favorites and backup['settings']['weeklyPlan']==[plan] and len(backup['settings']['planChecks'])==1)
                 if not (run(phone,'()=>document.documentElement.scrollWidth<=innerWidth')):raise AssertionError('Strength controls overflow on mobile')
 
                 check('anonymous requests cannot read diaries',api(stranger,'/api/diary')['status']==401)
@@ -175,6 +204,9 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 check('server independently rejects invalid coordinates',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':invalid})['status']==400)
                 bad_strength=json.loads(json.dumps(remote['state']));next(entry for entry in bad_strength['entries'] if entry['type']=='strength')['workout']['exercises'][0]['sets']=-2
                 check('server independently rejects invalid working sets',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_strength})['status']==400)
+                bad_library=json.loads(json.dumps(remote['state']));bad_library['settings']['favoriteExercises'].append('missing-exercise')
+                bad_plan=json.loads(json.dumps(remote['state']));bad_plan['settings']['weeklyPlan'][0]['weekday']=7
+                check('server independently rejects invalid library references and plan weekdays',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_library})['status']==400 and api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_plan})['status']==400)
                 try:
                     urlopen(Request(base+'/api/logout',data=b'{}',headers={'Content-Type':'application/json','Origin':'https://unrelated.example'},method='POST'))
                     csrf=200

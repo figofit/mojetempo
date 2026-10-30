@@ -66,6 +66,16 @@ jobs:
           cat "$RUNNER_TEMP/tempo-browser-smoke.jsonl"
           python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-browser-smoke.jsonl" --name "Packaged browser smoke" --exit-code "$tempo_test_status" || true
           exit "$tempo_test_status"
+      - name: Test daily logging exercise favorites and personal plans
+        shell: bash
+        run: |
+          set +e
+          python3 tests/daily_tools_smoke.py > "$RUNNER_TEMP/tempo-daily-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-daily-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-daily-smoke.jsonl" --name "Daily logging exercises and plans" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
       - name: Test offline use and safe release updates
         shell: bash
         run: |
@@ -106,6 +116,7 @@ jobs:
           retention-days: 7
           path: |
             ${{ runner.temp }}/tempo-browser-smoke.jsonl
+            ${{ runner.temp }}/tempo-daily-smoke.jsonl
             ${{ runner.temp }}/tempo-pwa-smoke.jsonl
             ${{ runner.temp }}/tempo-cloud-smoke.jsonl
             ${{ runner.temp }}/tempo-pages-smoke.jsonl

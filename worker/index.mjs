@@ -1,6 +1,8 @@
 import schema from '../migrations/0001_accounts.sql';
-import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets } from '../domain.mjs';
+import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets, librarySettings } from '../domain.mjs';
 import { emptyDiary } from '../sync-rules.mjs';
+import { planningSettings } from '../planning.mjs';
+import { accountRole, publicAccount, accountOverview } from './admin.mjs';
 
 const enc=new TextEncoder();
 const COOKIE='__Host-tempo-session', LOCAL_COOKIE='tempo-local-session';
@@ -73,11 +75,11 @@ async function createSession(db,request,account) {
 function validateState(input) {
   if(!input||input.version!==1||!Array.isArray(input.entries)||input.entries.length>10000||!input.settings)fail(400,'Neplatný formát deníku.');
   const settings={...DEFAULT_SETTINGS},limits={weeklyMinutes:10080,weeklySessions:100,weeklyRecovery:100,dailySteps:200000};
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
   for(const [key,max] of Object.entries(limits)){const value=input.settings[key];if(!Number.isInteger(value)||value<1||value>max)fail(400,'Neplatný cíl.');settings[key]=value;}
-  try {Object.assign(settings,strengthTargets(input.settings));}catch(error){fail(400,error.message);}
+  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today));}catch(error){fail(400,error.message);}
   if(!Array.isArray(input.settings.modules)||input.settings.modules.some(id=>!MODULES.some(m=>m.id===id)))fail(400,'Neplatné moduly.');
   settings.modules=[...new Set(input.settings.modules)];
-  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
   const used=new Set(),entries=input.entries.map(entry=>{
     if(!entry||!ids.test(entry.id)||used.has(entry.id)||entry.photoId&&!ids.test(entry.photoId))fail(400,'Neplatný nebo opakovaný identifikátor.');
     if(typeof entry.createdAt!=='string'||entry.createdAt.length>40||!Number.isFinite(Date.parse(entry.createdAt)))fail(400,'Neplatný čas záznamu.');
@@ -102,7 +104,7 @@ async function api(request,env) {
   if(!env.DB)fail(503,'Databáze zatím není připojená. Místní deník funguje dál.');
   const db=env.DB.withSession?env.DB.withSession('first-primary'):env.DB;
   await initialize(env.DB);
-  if(path==='/api/session'&&method==='GET')return json({user:await session(db,request)});
+  if(path==='/api/session'&&method==='GET')return json({user:publicAccount(await session(db,request),env)});
   if(['/api/register','/api/login','/api/recover'].includes(path)&&method==='POST') {
     const data=await body(request);const {login,password}=credentials(data);
     await rate(db,request,path,login,path==='/api/register'?4:12);
@@ -114,7 +116,7 @@ async function api(request,env) {
         db.prepare('INSERT INTO accounts(id,login,password_hash,salt,recovery_hash,created_at) VALUES(?,?,?,?,?,?)').bind(account.id,login,hash,salt,await digest(recoveryCode),Date.now()),
         db.prepare('INSERT INTO diaries(account_id,state,updated_at) VALUES(?,?,?)').bind(account.id,JSON.stringify(emptyDiary()),Date.now()),
       ]);}catch(error){if(String(error).includes('UNIQUE'))fail(409,'Účet už existuje.');throw error;}
-      return json({user:account,recoveryCode},201,{'Set-Cookie':await createSession(db,request,account)});
+      return json({user:publicAccount(account,env),recoveryCode},201,{'Set-Cookie':await createSession(db,request,account)});
     }
     const account=await db.prepare('SELECT * FROM accounts WHERE login=?').bind(login).first();
     if(path==='/api/recover') {
@@ -126,14 +128,21 @@ async function api(request,env) {
         db.prepare('DELETE FROM sessions WHERE account_id=?').bind(account.id),
       ]);
       if(!changed[0].meta.changes)fail(409,'Klíč už byl použit.');
-      return json({user:{id:account.id,login},recoveryCode},200,{'Set-Cookie':await createSession(db,request,account)});
+      return json({user:publicAccount(account,env),recoveryCode},200,{'Set-Cookie':await createSession(db,request,account)});
     }
     const hash=await passwordHash(password,account?.salt||'unknown-account-timing-padding');
     if(!account||!equal(hash,account.password_hash))fail(401,'E-mail nebo heslo nesouhlasí.');
-    return json({user:{id:account.id,login}},200,{'Set-Cookie':await createSession(db,request,account)});
+    return json({user:publicAccount(account,env)},200,{'Set-Cookie':await createSession(db,request,account)});
   }
   const account=await session(db,request);if(!account)fail(401,'Přihlas se znovu. Neodeslané zápisy zůstávají na tomto zařízení.');
   if(request.headers.get('X-Tempo-Account')!==account.id)fail(409,'Přihlášení se změnilo v jiné kartě. Obnov stránku nebo se znovu přihlas.');
+  if(path==='/api/admin/overview'&&method==='GET') {
+    if(accountRole(account,env)!=='admin')fail(403,'Přehled je dostupný pouze správci aplikace.');
+    const offset=Number(new URL(request.url).searchParams.get('offset')||0);
+    if(!Number.isSafeInteger(offset)||offset<0||offset>1_000_000)fail(400,'Neplatná stránka přehledu.');
+    await rate(db,request,'admin-read',account.id,120);
+    return json(await accountOverview(db,offset,env));
+  }
   if(path==='/api/logout'&&method==='POST') {
     const token=(request.headers.get('Cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(`${cookieName(request)}=`))?.split('=')[1];
     if(token)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await digest(token)).run();
