@@ -1,6 +1,7 @@
 import {localDate} from './domain.mjs';
 
 export const HABITS=Object.freeze([
+  Object.freeze({id:'mobility',label:'Mobilita',description:'Dal/a jsem si svoji mobilitu. Jen fajfka, bez povinných minut.'}),
   Object.freeze({id:'vitamins',label:'Vitamíny / doplňky',description:'Vzal/a jsem si svoje vitamíny nebo doplňky.'}),
   Object.freeze({id:'protein',label:'Bílkoviny',description:'Splnil/a jsem svůj vlastní cíl bílkovin.'}),
 ]);
@@ -42,5 +43,5 @@ export function renderTodayHabits(settings,today=localDate(),open=false) {
 
 export function renderHabitSettings(settings) {
   const {habits}=habitSettings(settings);
-  return `<section class="panel habit-settings"><div class="panel-header"><div><h2 class="panel-title">Drobné návyky, když je chceš</h2><p class="panel-subtitle">Dvě jednoduché fajfky v rozbalovací části Dnes. Zapni si jen to, co využiješ.</p></div></div>${HABITS.map(habit=>`<label class="habit-setting"><span><strong>${habit.label}</strong><small>${habit.description}</small></span><span class="switch"><input type="checkbox" class="switch-input" data-habit="${habit.id}" aria-label="Návyk ${habit.label}" ${habits.includes(habit.id)?'checked':''} /><span></span></span></label>`).join('')}<p class="form-hint">Bílkoviny si označíš podle svého cíle. Vypnutí uchová dosavadní odškrtnutí.</p></section>`;
+  return `<section class="panel habit-settings"><div class="panel-header"><div><h2 class="panel-title">Drobné návyky, když je chceš</h2><p class="panel-subtitle">Jednoduché fajfky v rozbalovací části Dnes. Zapni si jen to, co využiješ.</p></div></div>${HABITS.map(habit=>`<label class="habit-setting"><span><strong>${habit.label}</strong><small>${habit.description}</small></span><span class="switch"><input type="checkbox" class="switch-input" data-habit="${habit.id}" aria-label="Návyk ${habit.label}" ${habits.includes(habit.id)?'checked':''} /><span></span></span></label>`).join('')}<p class="form-hint">Bílkoviny si označíš podle svého cíle. Vypnutí uchová dosavadní odškrtnutí.</p></section>`;
 }

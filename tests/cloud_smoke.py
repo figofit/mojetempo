@@ -206,6 +206,13 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
 
                 check('anonymous requests cannot read diaries',api(stranger,'/api/diary')['status']==401)
                 stranger_user=storage(stranger,'return s.authenticate("register",arg)',{'login':f'other-{uuid.uuid4().hex}@example.test','password':password})
+                # New schedule fields and exercise metadata use the same private D1 snapshots.
+                rest={'id':'pause-device-test','start':planning['date'],'end':planning['date'],'label':'Volněji'}
+                mobility={'id':'mobility-device-test','createdAt':'2026-10-29T12:00:00Z','date':planning['date'],'type':'mobility','duration':15,'title':'Mobilita','mobilityExercises':['dead-bug','custom:Moje kyčle']}
+                storage(phone,'await s.updateState(d=>({...d,settings:{...d.settings,trainingSince:"2016-10-23",restPeriods:[arg.rest]},entries:[...d.entries,arg.mobility]}))',{'rest':rest,'mobility':mobility})
+                sync(phone);sync(windows)
+                other=state(windows)
+                check('rest periods training age and selected mobility exercises synchronize across devices',other['settings']['restPeriods']==[rest] and other['settings']['trainingSince']=='2016-10-23' and next(e for e in other['entries'] if e['id']==mobility['id'])['mobilityExercises']==mobility['mobilityExercises'])
                 check('a different account sees an empty diary',api(stranger,'/api/diary')['body']['state']['entries']==[])
                 check('a different account cannot fetch someone else’s photograph',api(stranger,'/api/photos/'+first['photoId'])['status']==404)
                 check('account mismatch headers cannot access another account',api(phone,'/api/diary',owner=False)['status']==409)

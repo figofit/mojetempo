@@ -17,6 +17,8 @@ const SHELL_PATHS = [
   'planning.mjs',
   'habits.mjs',
   'invitation.mjs',
+  'mobility-catalog.mjs',
+  'schedule-rules.mjs',
   'vendor/leaflet/leaflet.js',
   'vendor/leaflet/leaflet.css',
   'vendor/leaflet/LICENSE',

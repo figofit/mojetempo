@@ -1,5 +1,7 @@
 import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, workoutLabel, localDate, validateEntry, computeStats, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
 import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
+import {MOBILITY_EXERCISES,mobilityExerciseNames} from './mobility-catalog.mjs';
+import {scheduleSettings,activeRest,trainingAge,endRest} from './schedule-rules.mjs';
 import { renderInvitation } from './invitation.mjs';
 import { habitSettings, renderTodayHabits, renderHabitSettings, toggleHabit } from './habits.mjs';
 import { planningSettings, renderTodayPlan, renderWeeklyPlan, renderPlanEditor, handlePlanAction, handlePlanSubmit } from './planning.mjs';
@@ -58,8 +60,9 @@ let storageReady = false;
 let editingEntryId=null,authMode='login',settingsDirty=false,placeResults=[],placeSearchRevision=0;
 let strengthPeriod='week';
 let exerciseFilter='all', exerciseQuery='', planDirty=false;
-let renderedAccountRole;
+let renderedAccountRole,renderedDate;
 let habitsOpen=false;
+let planReference=new Date();
 let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const syncChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('moje-tempo-updates') : null;
@@ -110,7 +113,12 @@ function activityRow(entry, removable = false) {
   if (!type) return '';
   const amount=entry.type==='steps'?`${number(entry.steps)}<small> kroků</small>`:entry.type==='moment'?'Moment':`${number(entry.duration)}<small> min</small>`;
   const category={movement:'Pohyb',recovery:'Regenerace',steps:'Kroky',chronicle:'Kronika'}[type.category];
-  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.workout?renderWorkoutDetails(entry.workout):''}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
+  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.workout?renderWorkoutDetails(entry.workout):''}${renderMobilityDetails(entry)}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
+}
+
+function renderMobilityDetails(entry) {
+  const names=mobilityExerciseNames(entry.mobilityExercises||[]);
+  return names.length?`<details class="workout-details"><summary>Mobilita · ${names.length} cviků</summary><ul>${names.map(name=>`<li>${esc(name)}</li>`).join('')}</ul></details>`:'';
 }
 
 function renderWorkoutDetails(workout) {
@@ -137,7 +145,24 @@ function renderToday() {
 }
 
 function renderPlan() {
-  return `${heading('Můj týden, moje tempo.', 'Kolo, fitko, bazén i vlastní priority. Sestav si rytmus, který ti sedí.','<span class="tag">Vlastní týdenní plán</span>')}${demo?'<p class="form-notice">Tady si nastavíš svůj vlastní plán. První úpravou začneš vlastní deník.</p>':''}${renderWeeklyPlan(state.settings)}${renderPlanEditor(state.settings)}`;
+  return `${heading('Můj týden, moje tempo.', 'Kolo, fitko, bazén i vlastní priority. Sestav si rytmus, který ti sedí.','<span class="tag">Vlastní týdenní plán</span>')}${demo?'<p class="form-notice">Tady si nastavíš svůj vlastní plán. První úpravou začneš vlastní deník.</p>':''}${renderWeeklyPlan(state.settings,planReference)}${renderPlanEditor(state.settings)}`;
+}
+
+function renderTrainingAge() {
+  const age=trainingAge(state.settings.trainingSince);
+  return age?`<section class="panel journey-panel"><div class="panel-header"><div><h2 class="panel-title">Moje cesta</h2><p class="panel-subtitle">Kalendářní čas od ${dateText(state.settings.trainingSince,{year:'numeric'})}.</p></div><button class="button ghost small" data-view="settings">Upravit začátek</button></div><div class="journey-counts"><div><strong>${number(age.years)}</strong><span>celých let</span></div><div><strong>${number(age.totalMonths)}</strong><span>celých měsíců</span></div><div><strong>${number(age.totalDays)}</strong><span>dní od začátku</span></div></div></section>`:'';
+}
+
+function renderRestSettings() {
+  const end=new Date();end.setDate(end.getDate()+13);
+  return `<section class="panel rest-settings"><div class="panel-header"><div><h2 class="panel-title">Volnější režim</h2><p class="panel-subtitle">Pozastaví plnění plánu a cílů. Skutečné zápisy zůstanou ve statistikách.</p></div>${icon('moon')}</div><details><summary>Nastavit období klidu</summary><form id="rest-form"><div class="form-grid"><label class="form-field">Od<input name="start" type="date" value="${localDate()}" required /></label><label class="form-field">Do včetně<input name="end" type="date" value="${localDate(end)}" required /></label><label class="form-field full">Název<input name="label" maxlength="80" value="Volnější režim" required /></label></div><button class="button secondary" type="submit">Uložit volnější režim</button></form></details><div class="rest-list">${[...(state.settings.restPeriods||[])].sort((a,b)=>b.start.localeCompare(a.start)).slice(0,6).map(period=>`<div><span><strong>${esc(period.label)}</strong><small>${dateText(period.start,{month:'short'})} – ${dateText(period.end,{month:'short',year:'numeric'})}</small></span><button class="button ghost small" data-action="remove-rest" data-rest-id="${period.id}">Zrušit období</button></div>`).join('')}</div></section>`;
+}
+
+function goalCardContent(goal) {
+  const rest=activeRest(state.settings);
+  if(rest)return `<span class="eyebrow">VOLNĚJŠÍ REŽIM</span><h2>${esc(rest.label)}</h2><p>Plnění cílů má pauzu do ${dateText(rest.end,{month:'short'})}. Zápisy ve statistikách zůstávají.</p><button class="button ghost small" data-action="end-rest" data-rest-id="${rest.id}">Ukončit režim</button>`;
+  if(goal)return `<span class="eyebrow">${goal.title}</span>${ring(goal.percent,'splněno',true)}<p><strong>${number(goal.value)}</strong> z ${number(goal.target)} ${goal.unit}</p><button class="button ghost small" data-view="settings">Upravit cíl ${icon('arrow')}</button>`;
+  return `<span class="eyebrow">TVŮJ OSOBNÍ PROSTOR</span><h2>Moment po momentu.</h2><p>Kronika uchová, co si chceš zapamatovat.</p><button class="button ghost small" data-view="chronicle">Otevřít kroniku ${icon('arrow')}</button>`;
 }
 
 function renderOverview(stats) {
@@ -147,7 +172,7 @@ function renderOverview(stats) {
   const goal=moduleOn('movement')?{title:'TÝDENNÍ CÍL POHYBU',percent:stats.weekGoalPercent,value:stats.weekMinutes,target:state.settings.weeklyMinutes,unit:'minut'}:moduleOn('recovery')?{title:'TÝDENNÍ CÍL REGENERACE',percent:stats.weekRecovery/state.settings.weeklyRecovery*100,value:stats.weekRecovery,target:state.settings.weeklyRecovery,unit:'aktivit'}:moduleOn('steps')?{title:'DNEŠNÍ CÍL KROKŮ',percent:stats.todaySteps/state.settings.dailySteps*100,value:stats.todaySteps,target:state.settings.dailySteps,unit:'kroků'}:null;
   return `${heading('Každý pohyb se počítá.', 'Přehled tvého úsilí. Vlastním tempem, den za dnem.')}${renderToday()}
     <div class="hero-grid"><section class="hero-card"><div class="hero-copy"><span class="hero-kicker">TVOJE CESTA, TVOJE PRAVIDLA</span><h2>Dobře se hýbat.<br>Dobře se cítit.</h2><p>Trénink, kolo i zasloužený odpočinek.<br>Malé momenty, které tvoří velký příběh.</p><button class="button hero-button" data-action="add">Přidat dnešní moment ${icon('arrow')}</button></div><div class="hero-visual" aria-hidden="true"><svg viewBox="0 0 260 230" fill="none"><circle cx="150" cy="108" r="92" stroke="#ffffff" stroke-opacity=".12"/><circle cx="150" cy="108" r="67" stroke="#ffffff" stroke-opacity=".12"/><path d="M32 180C55 100 96 193 119 110S173 153 209 52" stroke="#c5edb3" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="180" r="8" fill="#c5edb3"/><circle cx="119" cy="110" r="8" fill="#c5edb3"/><circle cx="209" cy="52" r="11" fill="#c5edb3"/><circle cx="209" cy="52" r="21" stroke="#c5edb3" stroke-opacity=".4"/><path d="m180 181 7 7 14-15" stroke="#c5edb3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="166" y="159" width="50" height="43" rx="14" stroke="#ffffff" stroke-opacity=".2"/></svg><span class="hero-badge">${icon('sparkles')} Malé kroky. Skutečný posun.</span></div></section>
-    <section class="goal-card"><div>${goal?`<span class="eyebrow">${goal.title}</span>${ring(goal.percent,'splněno',true)}<p><strong>${number(goal.value)}</strong> z ${number(goal.target)} ${goal.unit}</p><button class="button ghost small" data-view="settings">Upravit cíl ${icon('arrow')}</button>`:`<span class="eyebrow">TVŮJ OSOBNÍ PROSTOR</span><h2>Moment po momentu.</h2><p>Kronika uchová, co si chceš zapamatovat.</p><button class="button ghost small" data-view="chronicle">Otevřít kroniku ${icon('arrow')}</button>`}</div></section></div>
+    <section class="goal-card"><div>${goalCardContent(goal)}</div></section></div>
     <div class="stat-grid">${moduleOn('movement')?statCard('clock','Minuty pohybu',number(stats.weekMinutes),'min',`Tento týden · cíl ${number(state.settings.weeklyMinutes)} min`)+statCard('dumbbell','Pohybové aktivity',number(count),'',`${stats.daysActive} aktivních dní · cíl ${state.settings.weeklySessions} aktivit`):''}${moduleOn('recovery')?statCard('moon','Regenerační aktivity',number(stats.weekRecovery),'×',`Tento týden · cíl ${state.settings.weeklyRecovery} aktivity`,'#ae835d'):''}${moduleOn('steps')?statCard('footprints','Dnešní kroky',number(stats.todaySteps),'',`Zapsané aktivity · cíl ${number(state.settings.dailySteps)}`,'#6388b6'):''}</div>
     <div class="dashboard-grid"><section class="panel">${weekChart(stats)}</section><section class="panel compact-calendar">${monthCalendar(stats)}</section></div>
     <div class="dashboard-grid"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Poslední aktivity</h2><p class="panel-subtitle">Malé zápisy, které se neztratí.</p></div><button class="button ghost small" data-view="diary">Celý deník ${icon('arrow')}</button></div><div class="activity-list">${recent.length?recent.map(entry=>activityRow(entry)).join(''):empty()}</div></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Chvilka pro bilanci</h2><p class="panel-subtitle">Postřehy z tvých záznamů.</p></div>${icon('sparkles')}</div><div class="insights-list">${insights.slice(0,3).map((insight,index)=>`<article class="insight-card"><span class="insight-icon">${icon(['target','moon','heart'][index])}</span><p>${esc(insight)}</p></article>`).join('')}</div><small class="form-hint">Pravidla podle záznamů. Bez hodnocení zdraví nebo AI rozboru.</small></section></div>`;
@@ -161,15 +186,16 @@ function renderDiary(stats) {
 
 function renderChronicle(stats) {
   if (!moduleOn('chronicle')) return `${heading('Moje kronika','Vzpomínky na tvoji cestu.','<button class="button secondary" data-view="modules">Zapnout modul</button>')}${empty('Kronika je právě vypnutá.',false)}`;
-  return `${heading('Každý moment má svůj příběh.', 'Fotky, myšlenky a malá vítězství. Tvoje osobní kronika.')}<div class="timeline">${stats.recentEntries.length?stats.recentEntries.map(entry=>{const type=typeById(entry.type);return `<article class="timeline-card"><div class="timeline-date">${dateText(entry.date,{year:'numeric'})}</div>${entry.photoId&&!demo?`<img class="timeline-photo" data-photo="${esc(entry.photoId)}" alt="Fotografie k aktivitě ${esc(entry.title||type.label)}" />`:demo?`<div class="photo-empty">${icon(type.icon)}<span>${esc(type.label)}</span><small>Ukázkový moment</small></div>`:''}<div class="timeline-body"><span class="tag">${esc(type.label)} · ${entry.type==='steps'?number(entry.steps)+' kroků':entry.duration?entry.duration+' min':'Osobní moment'}</span><h2>${esc(entry.title||type.label)}</h2><p style="white-space:pre-wrap">${esc(entry.note||'I tenhle moment patří do tvého příběhu.')}</p>${entry.mood?`<span class="form-hint">Pocit po aktivitě: ${['','Náročné','Slabší','Dobré','Skvělé','Výborné'][entry.mood]}</span>`:''}</div></article>`;}).join(''):empty('První moment čeká na tebe.')}</div>`;
+  return `${heading('Každý moment má svůj příběh.', 'Fotky, myšlenky a malá vítězství. Tvoje osobní kronika.')}<div class="timeline">${stats.recentEntries.length?stats.recentEntries.map(entry=>{const type=typeById(entry.type);return `<article class="timeline-card"><div class="timeline-date">${dateText(entry.date,{year:'numeric'})}</div>${entry.photoId&&!demo?`<img class="timeline-photo" data-photo="${esc(entry.photoId)}" alt="Fotografie k aktivitě ${esc(entry.title||type.label)}" />`:demo?`<div class="photo-empty">${icon(type.icon)}<span>${esc(type.label)}</span><small>Ukázkový moment</small></div>`:''}<div class="timeline-body"><span class="tag">${esc(type.label)} · ${entry.type==='steps'?number(entry.steps)+' kroků':entry.duration?entry.duration+' min':'Osobní moment'}</span><h2>${esc(entry.title||type.label)}</h2><p style="white-space:pre-wrap">${esc(entry.note||'I tenhle moment patří do tvého příběhu.')}</p>${renderMobilityDetails(entry)}${entry.mood?`<span class="form-hint">Pocit po aktivitě: ${['','Náročné','Slabší','Dobré','Skvělé','Výborné'][entry.mood]}</span>`:''}</div></article>`;}).join(''):empty('První moment čeká na tebe.')}</div>`;
 }
 
 function renderStats(stats) {
   const all=visibleEntries();
+  const pause=activeRest(state.settings);
   const totalMinutes=all.reduce((sum,entry)=>sum+Number(entry.duration),0);
   const types=stats.typeBreakdown.filter(type=>type.count>0);
   const max=Math.max(1,...types.map(type=>type.minutes));
-  return `${heading('Tvůj pohyb v souvislostech.', 'Trendy vycházejí z toho, co opravdu zaznamenáš.','<button class="button secondary" data-action="csv">'+icon('download')+'Exportovat CSV</button>')}<div class="stat-grid">${statCard('book','Všechny záznamy',number(all.length),'','Za celou dobu deníku')}${statCard('clock','Celkový čas',number(Math.round(totalMinutes/60*10)/10),'h','Pohyb a regenerace dohromady')}${statCard('calendar','Aktivní dny',number(new Set(all.map(entry=>entry.date)).size),'','Za celou dobu deníku')}${statCard('target','Cíl tohoto týdne',number(Math.round(stats.weekGoalPercent)),'%','Jen pohybové aktivity')}</div><div class="dashboard-grid"><section class="panel">${weekChart(stats)}</section><section class="panel">${monthCalendar(stats)}</section></div><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Z čeho se skládá tvůj týden</h2><p class="panel-subtitle">Každý typ pohybu má svoje místo.</p></div></div>${types.length?types.map(type=>`<div class="breakdown-row"><span>${esc(type.label)}</span><div class="progress-track"><div class="progress-fill" style="width:${type.minutes/max*100}%;background:${type.color}"></div></div><strong>${type.minutes} min</strong><small>${type.count}×</small></div>`).join(''):empty('Statistiky porostou s tvými zápisy.',false)}</section><div class="stat-grid">${statCard('mountain','Výšlapy',number(stats.weekHikes),'','Tento týden')}${statCard('footprints','Vzdálenost',number(Math.round(stats.weekDistance*100)/100),'km','Tento týden · všechny pohybové aktivity')}${statCard('mountain','Nastoupáno',number(stats.weekElevation),'m','Tento týden')}</div>${moduleOn('movement')?renderStrength():''}${renderPlaces()}`;
+  return `${heading('Tvůj pohyb v souvislostech.', 'Trendy vycházejí z toho, co opravdu zaznamenáš.','<button class="button secondary" data-action="csv">'+icon('download')+'Exportovat CSV</button>')}<div class="stat-grid">${statCard('book','Všechny záznamy',number(all.length),'','Za celou dobu deníku')}${statCard('clock','Celkový čas',number(Math.round(totalMinutes/60*10)/10),'h','Pohyb a regenerace dohromady')}${statCard('calendar','Aktivní dny',number(new Set(all.map(entry=>entry.date)).size),'','Za celou dobu deníku')}${statCard('target','Plnění cíle',pause?'Pauza':number(Math.round(stats.weekGoalPercent)),pause?'':'%',pause?'Zápisy ve statistikách zůstávají':'Jen pohybové aktivity')}</div>${renderTrainingAge()}<div class="dashboard-grid"><section class="panel">${weekChart(stats)}</section><section class="panel">${monthCalendar(stats)}</section></div><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Z čeho se skládá tvůj týden</h2><p class="panel-subtitle">Každý typ pohybu má svoje místo.</p></div></div>${types.length?types.map(type=>`<div class="breakdown-row"><span>${esc(type.label)}</span><div class="progress-track"><div class="progress-fill" style="width:${type.minutes/max*100}%;background:${type.color}"></div></div><strong>${type.minutes} min</strong><small>${type.count}×</small></div>`).join(''):empty('Statistiky porostou s tvými zápisy.',false)}</section><div class="stat-grid">${statCard('mountain','Výšlapy',number(stats.weekHikes),'','Tento týden')}${statCard('footprints','Vzdálenost',number(Math.round(stats.weekDistance*100)/100),'km','Tento týden · všechny pohybové aktivity')}${statCard('mountain','Nastoupáno',number(stats.weekElevation),'m','Tento týden')}</div>${moduleOn('movement')?renderStrength():''}${renderPlaces()}`;
 }
 
 function renderModules() {
@@ -209,7 +235,7 @@ async function showAdminOverview(offset=0) {
 }
 
 function renderSettings() {
-  return `${heading('Cíle, které sedí tobě.', 'Nastav si vlastní měřítko. A postupně ho přizpůsobuj.','<span class="tag">Osobní nastavení</span>')}${renderAccountSettings()}${renderAdminSettings()}<div class="settings-layout"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Moje cíle</h2><p class="panel-subtitle">Cíle slouží jako orientace, ne jako hodnocení.</p></div>${icon('target')}</div><form id="settings-form" class="settings-form"><label class="form-field">Jméno v mém deníku<input name="name" maxlength="80" required value="${esc(state.settings.name)}" /></label><div class="form-grid"><label class="form-field">Pohyb za týden (minuty)<input name="weeklyMinutes" type="number" min="1" max="10080" step="1" required value="${state.settings.weeklyMinutes}"/></label><label class="form-field">Pohybové aktivity za týden<input name="weeklySessions" type="number" min="1" max="100" step="1" required value="${state.settings.weeklySessions}"/></label><label class="form-field">Regenerace za týden (aktivity)<input name="weeklyRecovery" type="number" min="1" max="100" step="1" required value="${state.settings.weeklyRecovery}"/></label><label class="form-field">Denní cíl kroků<input name="dailySteps" type="number" min="1" max="200000" step="1" required value="${state.settings.dailySteps}"/></label></div><h3>Cílové poměry pracovních sérií</h3><p class="form-hint">Orientační srovnání za celé období. Přizpůsob si ho svému programu nebo doporučení trenéra.</p><div class="form-grid"><label class="form-field">Tahů na 1 sérii tlaků<input name="strengthPullPerPush" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthPullPerPush??1}" /></label><label class="form-field">Hinge na 1 sérii dřepů<input name="strengthHingePerSquat" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthHingePerSquat??1}" /></label></div><button type="submit" class="button primary">Uložit cíle</button></form></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Tvá data jsou tvoje.</h2><p class="panel-subtitle">${getAccount().user?'Záloha obsahuje i záznamy tvého účtu.':'Záznamy a fotky zůstávají v tomto prohlížeči.'}</p></div>${icon('shield')}</div><p class="settings-copy">Záloha JSON obsahuje všechny záznamy, cíle, moduly i fotografie. Stáhni si ji před změnou zařízení, adresy aplikace nebo smazáním dat prohlížeče.</p><div class="export-buttons"><button class="button secondary" data-action="backup">${icon('download')}Stáhnout celou zálohu</button><button class="button secondary" data-action="import">${icon('upload')}Obnovit ze zálohy</button><button class="button ghost" data-action="ics">${icon('calendar')}Export pro Google Kalendář (.ics)</button></div><p class="form-hint">Kalendář se importuje ručně. Import stejného souboru do kalendáře může vytvořit duplicity.</p></section></div>`;
+  return `${heading('Cíle, které sedí tobě.', 'Nastav si vlastní měřítko. A postupně ho přizpůsobuj.','<span class="tag">Osobní nastavení</span>')}${renderAccountSettings()}${renderAdminSettings()}${renderRestSettings()}<div class="settings-layout"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Moje cíle</h2><p class="panel-subtitle">Cíle slouží jako orientace, ne jako hodnocení.</p></div>${icon('target')}</div><form id="settings-form" class="settings-form"><label class="form-field">Jméno v mém deníku<input name="name" maxlength="80" required value="${esc(state.settings.name)}" /></label><label class="form-field">Od kdy cvičím <span class="form-hint">nepovinné · pro dlouhodobou statistiku</span><input name="trainingSince" type="date" max="${localDate()}" value="${esc(state.settings.trainingSince||'')}" /></label><div class="form-grid"><label class="form-field">Pohyb za týden (minuty)<input name="weeklyMinutes" type="number" min="1" max="10080" step="1" required value="${state.settings.weeklyMinutes}"/></label><label class="form-field">Pohybové aktivity za týden<input name="weeklySessions" type="number" min="1" max="100" step="1" required value="${state.settings.weeklySessions}"/></label><label class="form-field">Regenerace za týden (aktivity)<input name="weeklyRecovery" type="number" min="1" max="100" step="1" required value="${state.settings.weeklyRecovery}"/></label><label class="form-field">Denní cíl kroků<input name="dailySteps" type="number" min="1" max="200000" step="1" required value="${state.settings.dailySteps}"/></label></div><h3>Cílové poměry pracovních sérií</h3><p class="form-hint">Orientační srovnání za celé období. Přizpůsob si ho svému programu nebo doporučení trenéra.</p><div class="form-grid"><label class="form-field">Tahů na 1 sérii tlaků<input name="strengthPullPerPush" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthPullPerPush??1}" /></label><label class="form-field">Hinge na 1 sérii dřepů<input name="strengthHingePerSquat" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthHingePerSquat??1}" /></label></div><button type="submit" class="button primary">Uložit cíle</button></form></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Tvá data jsou tvoje.</h2><p class="panel-subtitle">${getAccount().user?'Záloha obsahuje i záznamy tvého účtu.':'Záznamy a fotky zůstávají v tomto prohlížeči.'}</p></div>${icon('shield')}</div><p class="settings-copy">Záloha JSON obsahuje všechny záznamy, cíle, moduly i fotografie. Stáhni si ji před změnou zařízení, adresy aplikace nebo smazáním dat prohlížeče.</p><div class="export-buttons"><button class="button secondary" data-action="backup">${icon('download')}Stáhnout celou zálohu</button><button class="button secondary" data-action="import">${icon('upload')}Obnovit ze zálohy</button><button class="button ghost" data-action="ics">${icon('calendar')}Export pro Google Kalendář (.ics)</button></div><p class="form-hint">Kalendář se importuje ručně. Import stejného souboru do kalendáře může vytvořit duplicity.</p></section></div>`;
 }
 
 async function hydratePhotos(revision) {
@@ -239,7 +265,7 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   $('#view-content').innerHTML=renderers[currentView]();
   renderAccountStatus();
-  renderedAccountRole=getAccount().user?.role;
+  renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
   document.title=`${views[currentView]} · Moje tempo`;
   hydratePhotos(revision);
 }
@@ -284,6 +310,8 @@ async function openEntry(id=null, preset={}) {
   $('#entry-form').reset();
   $('#workout-focus').innerHTML=WORKOUT_FOCUSES.map(focus=>`<option value="${focus.id}">${esc(focus.label)}</option>`).join('');
   $('#workout-exercises').replaceChildren();
+  $('#mobility-exercises').innerHTML=MOBILITY_EXERCISES.map(exercise=>`<label><input type="checkbox" data-mobility-id="${exercise.id}" />${esc(exercise.name)}</label>`).join('');
+  $('#mobility-custom').value='';
   editingEntryId=id;
   placeSearchRevision++;
   $('#place-results').replaceChildren();$('#place-status').textContent='';
@@ -300,6 +328,8 @@ async function openEntry(id=null, preset={}) {
     if(!entry)throw new Error('Zápis už neexistuje.');
     for(const name of ['type','date','duration','steps','distance','elevation','title','note']) $('#entry-form').elements[name].value=entry[name]??'';
     if(entry.mood)$('#entry-form').elements.mood.value=entry.mood;
+    for(const checkbox of document.querySelectorAll('[data-mobility-id]'))checkbox.checked=(entry.mobilityExercises||[]).includes(checkbox.dataset.mobilityId);
+    $('#mobility-custom').value=(entry.mobilityExercises||[]).filter(id=>id.startsWith('custom:')).map(id=>id.slice(7)).join('\n');
     if(entry.location)selectPlace(entry.location);
     if(entry.workout){$('#workout-focus').value=entry.workout.focus;$('#workout-split').value=entry.workout.splitName||'';entry.workout.exercises.forEach(exercise=>addExercise(exercise));}
   }
@@ -324,6 +354,7 @@ function syncEntryFields() {
   $('#entry-steps-field').classList.toggle('hidden',!moduleOn('steps')||type==='moment');
   $('#entry-chronicle-fields').classList.toggle('hidden',!moduleOn('chronicle'));
   for(const field of ['distance','elevation'])$('#entry-'+field+'-field').classList.toggle('hidden',!['hiking','walking','cycling','cardio'].includes(type));
+  $('#mobility-fields').classList.toggle('hidden',type!=='mobility');$('#mobility-fields').disabled=type!=='mobility';
   syncWorkoutFields();
 }
 
@@ -427,6 +458,7 @@ async function submitEntry(event) {
     const focus=$('#workout-focus').value;
     if(focus!=='unspecified'||exercises.length)values.workout={focus,splitName:$('#workout-split').value,exercises};
   }
+  if(values.type==='mobility')values.mobilityExercises=[...new Set([...document.querySelectorAll('[data-mobility-id]:checked')].map(el=>el.dataset.mobilityId).concat($('#mobility-custom').value.split(/\r?\n/).map(name=>name.trim()).filter(Boolean).map(name=>'custom:'+name)))];
   const previous=editingEntryId?state.entries.find(entry=>entry.id===editingEntryId):null;
   if(previous?.photoId)values.photoId=previous.photoId;
   if($('#place-query').value.trim()||$('#place-latitude').value||$('#place-longitude').value) {
@@ -450,7 +482,9 @@ async function submitEntry(event) {
     else if(previous?.photoId)entry.photoId=previous.photoId;
     await persist(current=>{
       if(editingEntryId&&!current.entries.some(item=>item.id===editingEntryId))throw new Error('Zápis byl mezitím smazán.');
-      return {...current,entries:editingEntryId?current.entries.map(item=>item.id===id?entry:item):[...current.entries,entry],onboardingComplete:true};
+      let settings=current.settings;
+      if(entry.type==='mobility'&&(settings.habits||[]).includes('mobility')&&!(settings.habitChecks||[]).some(check=>check.id===entry.date+':mobility'))settings={...settings,...toggleHabit(settings,'mobility',entry.date)};
+      return {...current,settings,entries:editingEntryId?current.entries.map(item=>item.id===id?entry:item):[...current.entries,entry],onboardingComplete:true};
     });
     if(photoId&&previous?.photoId)await deletePhoto(previous.photoId).catch(()=>{});
     $('#entry-dialog').close();render();notify('Uloženo. Další malý krok se počítá.');
@@ -474,7 +508,7 @@ function validatedSettings(input) {
   const output={...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]};
   if(input?.name!==undefined){if(typeof input.name!=='string'||!input.name.trim()||input.name.trim().length>80)throw new Error('Jméno v deníku může mít 1 až 80 znaků.');output.name=input.name.trim();}
   Object.assign(output,strengthTargets(input));
-  Object.assign(output,librarySettings(input),planningSettings(input),habitSettings(input));
+  Object.assign(output,librarySettings(input),planningSettings(input),habitSettings(input),scheduleSettings(input));
   for(const [key,max] of Object.entries(limits)) {
     const value=Number(input?.[key]);
     if(!Number.isInteger(value)||value<1||value>max) throw new Error('Cíle musí být celá kladná čísla v povoleném rozsahu.');
@@ -575,6 +609,9 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(['plan-prev','plan-next','plan-today'].includes(name)){if(name==='plan-today')planReference=new Date();else{planReference=new Date(planReference);planReference.setDate(planReference.getDate()+(name==='plan-prev'?-7:7));}render();return;}
+  if(name==='end-rest'){await persist(current=>({...current,settings:{...current.settings,...endRest(current.settings,element.dataset.restId)}}));render();notify('Plnění plánu a cílů je znovu aktivní.');return;}
+  if(name==='remove-rest'){await persist(current=>({...current,settings:{...current.settings,restPeriods:(current.settings.restPeriods||[]).filter(period=>period.id!==element.dataset.restId)}}));render();return;}
   if(name==='invite-register'){openAccount();setAuthMode('register');return;}
   if(name==='accept-invitation'){
     element.disabled=true;
@@ -583,7 +620,7 @@ async function action(name,element) {
     return;
   }
   if(name==='toggle-habit'){
-    await persist(current=>({...current,settings:{...current.settings,...toggleHabit(current.settings,element.dataset.habitId)},onboardingComplete:true}));
+    await persist(current=>({...current,settings:{...current.settings,...toggleHabit(current.settings,element.dataset.habitId,element.dataset.habitDate||localDate())},onboardingComplete:true}));
     demo=false;habitsOpen=true;render();return;
   }
   if(await handlePlanAction(name,element,planCallbacks()))return;
@@ -656,9 +693,14 @@ document.addEventListener('change',async event=>{
   }
 });
 document.addEventListener('submit',async event=>{
-  if(event.target.id==='plan-form') {
+  if(event.target.id==='rest-form'){
     event.preventDefault();
-    try {await handlePlanSubmit(event,planCallbacks());planDirty=false;}catch(error){notify(error.message,true);}
+    try {const values=Object.fromEntries(new FormData(event.target));const period={id:'pause-'+crypto.randomUUID(),...values};await persist(current=>({...current,settings:{...current.settings,...scheduleSettings({...current.settings,restPeriods:[...(current.settings.restPeriods||[]),period]})}}));settingsDirty=false;render();notify('Volnější režim je uložený. Zápisy ve statistikách zůstávají.');}catch(error){notify(error.message,true);}
+    return;
+  }
+  if(['plan-form','rhythm-form'].includes(event.target.id)) {
+    event.preventDefault();if(event.target.id==='rhythm-form')planDirty=true;
+    try {if(await handlePlanSubmit(event,planCallbacks())===true)planDirty=false;}catch(error){notify(error.message,true);}
     return;
   }
   if(event.target.id!=='settings-form') return;
@@ -673,7 +715,7 @@ $('#entry-type').addEventListener('change',syncEntryFields);
 $('#workout-focus').addEventListener('change',syncWorkoutFields);
 $('#entry-date').addEventListener('change',renderExerciseLibrary);
 $('#exercise-search').addEventListener('input',event=>{exerciseQuery=event.target.value;renderExerciseLibrary();});
-document.addEventListener('input',event=>{if(event.target.closest('#settings-form'))settingsDirty=true;if(event.target.closest('#plan-form'))planDirty=true;});
+document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
 $('#place-query').addEventListener('input',()=>{placeSearchRevision++;$('#place-results').replaceChildren();$('#place-status').textContent='';$('#place-latitude').value='';$('#place-longitude').value='';});
 $('#account-form').addEventListener('submit',async event=>{
   event.preventDefault();$('#account-submit').disabled=true;$('#account-error').textContent='';
@@ -730,3 +772,8 @@ try {
   storageReady=false;
   $('#view-content').innerHTML=`<section class="panel" role="alert"><h1>Deník se nepodařilo otevřít.</h1><p>${esc(error.message||'Povol ukládání dat v prohlížeči a obnov stránku.')}</p><p>Původní data jsme nepřepsali. Zkus stejný prohlížeč a stejnou adresu aplikace.</p></section>`;
 }
+
+// Refresh day-dependent routines when an installed app stays open overnight.
+function refreshCalendarDay(){if(storageReady&&renderedDate!==localDate()&&!settingsDirty&&!planDirty&&!document.querySelector('dialog[open]'))render();}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCalendarDay();});
+setInterval(refreshCalendarDay,60000);

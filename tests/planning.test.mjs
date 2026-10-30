@@ -75,7 +75,7 @@ test('personal text is escaped in cards, labels, buttons and plan editor', () =>
     assert.ok(html.includes('&lt;img'));
     assert.ok(html.includes('&amp; já'));
   }
-  assert.ok(renderPlanEditor(settings).includes('Vlastní činnost / práce'));
+  assert.ok(renderPlanEditor(settings).includes('Vlastní činnost'));
   assert.ok(renderPlanEditor(settings).includes('Kardio / bazén'));
 });
 

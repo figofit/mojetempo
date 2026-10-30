@@ -8,15 +8,19 @@ První verze slouží k ověření každodenního používání. Navazuje na zá
 
 ## Co aplikace nabízí
 
-- Dvě volitelné osobní fajfky: vitamíny / doplňky a vlastní cíl bílkovin. Zapnutí v Mých modulech, malá rozbalovací část Dnes; historie se synchronizuje i zálohuje. Výchozí stav je vypnutý.
+- Volitelné osobní fajfky: denní mobilita, vitamíny / doplňky a vlastní cíl bílkovin. Zapnutí v Mých modulech, malá rozbalovací část Dnes; historie se synchronizuje i zálohuje. Výchozí stav je vypnutý.
 - [Osobní pozvánky](docs/invitations.md) s vlastním účtem a připraveným prvním milníkem do kroniky.
 
 - Přehled **Dnes** s rychlým zápisem pohybu a doplněním včerejších kroků.
 - **Můj plán**: vlastní opakovaný týden pro kolo, fitko, bazén, odpočinek, práci i libovolné priority. Odškrtnutí plánu je samostatné; do statistik pohybu vstupují skutečné zápisy.
+- Návrh barevného týdne podle vlastních počtů aktivit s náhledem před použitím; samostatné položky pro setkání, kino i práci.
+- Volnější režim na zvolené období: pozastaví plnění plánu a cílů, zachová skutečné aktivity.
+- Dlouhodobou statistiku let, měsíců a dní od vlastního data začátku cvičení.
 - Knihovnu 24 cviků s filtry, oblíbenými a vlastními cviky. Při přidání se předvyplní hlavní pohybový vzor a poslední počet pracovních sérií.
 - Bezpečnou [roli správce](docs/admin-access.md) přiřazenou konkrétnímu ID účtu. Správce vidí metadata účtů a souhrn využití, nikoliv obsah osobních deníků.
 
 - Zápis aktivit s datem, délkou, kroky, poznámkou a pocitem po aktivitě. Mobilita / protažení má vlastní štítek v regeneraci; její minuty neplní cíl pohybu.
+- U mobility výběr 16 cviků z [IT FIT Vault](https://github.com/figofit/itfitweb/blob/3ba8d3569d4e3fa849a685c7b032f6c98dd458d4/vault/mobilita/index.html) a vlastní názvy. Jde o převzatý seznam, nikoli automatickou synchronizaci s členským atlasem.
 - Výšlapy a turistiku, vzdálenost a nastoupané metry ve statistikách i exportech.
 - Volitelné místo u libovolného zápisu včetně procházky nebo osobního momentu. Vyhledání místa, aktuální polohu nebo ruční souřadnice. Menší mapka **Moje místa** je dole ve statistikách; zobrazuje body, nikoliv GPS trasy.
 - Silové tréninky: celé tělo, vršek, spodek, push/pull/legs nebo vlastní split. Konkrétní cviky nebo pohybové vzory, pracovní série, týdenní i 28denní přehled a nastavitelné poměry tahů/tlaků a hinge/dřepů. Nevyplněné tréninky se do objemu neodhadují.

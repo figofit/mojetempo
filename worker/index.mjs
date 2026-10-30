@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets, librarySetti
 import { emptyDiary } from '../sync-rules.mjs';
 import { planningSettings } from '../planning.mjs';
 import { habitSettings } from '../habits.mjs';
+import {scheduleSettings} from '../schedule-rules.mjs';
 import { accountRole, publicAccount, accountOverview } from './admin.mjs';
 import { invitationFor, publicInvitation, applyInvitation } from './invitations.mjs';
 
@@ -83,7 +84,7 @@ function validateState(input) {
   }
   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
   for(const [key,max] of Object.entries(limits)){const value=input.settings[key];if(!Number.isInteger(value)||value<1||value>max)fail(400,'Neplatný cíl.');settings[key]=value;}
-  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today),habitSettings(input.settings,today));}catch(error){fail(400,error.message);}
+  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today),habitSettings(input.settings,today),scheduleSettings(input.settings,today));}catch(error){fail(400,error.message);}
   if(!Array.isArray(input.settings.modules)||input.settings.modules.some(id=>!MODULES.some(m=>m.id===id)))fail(400,'Neplatné moduly.');
   settings.modules=[...new Set(input.settings.modules)];
   const used=new Set(),entries=input.entries.map(entry=>{
@@ -173,9 +174,19 @@ async function api(request,env) {
   }
   if(path==='/api/diary'&&method==='PUT') {
     await rate(db,request,'write',account.id,180);
-    const data=await body(request,MAX_STATE+100),state=validateState(data.state),serialized=JSON.stringify(state);
-    if(enc.encode(serialized).length>MAX_STATE)fail(413,'Deník účtu překročil 1,5 MB. Stáhni si zálohu.');
+    const data=await body(request,MAX_STATE+100);
     if(!Number.isSafeInteger(data.revision)||data.revision<0)fail(400,'Neplatná verze deníku.');
+    // Older installed clients omit newer optional settings. Preserve those keys;
+    // current clients send explicit empty arrays when clearing their own data.
+    const optional=Object.keys(DEFAULT_SETTINGS).filter(key=>!['modules','weeklyMinutes','weeklySessions','weeklyRecovery','dailySteps'].includes(key));
+    if(data.state?.settings&&typeof data.state.settings==='object'&&!Array.isArray(data.state.settings)&&optional.some(key=>!Object.hasOwn(data.state.settings,key))) {
+      const previous=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(account.id).first();
+      if(previous.revision!==data.revision)fail(409,'Deník se mezitím změnil na jiném zařízení.');
+      const stored=JSON.parse(previous.state).settings;
+      for(const key of optional)if(!Object.hasOwn(data.state.settings,key)&&Object.hasOwn(stored,key))data.state.settings[key]=stored[key];
+    }
+    const state=validateState(data.state),serialized=JSON.stringify(state);
+    if(enc.encode(serialized).length>MAX_STATE)fail(413,'Deník účtu překročil 1,5 MB. Stáhni si zálohu.');
     const photos=await db.prepare('SELECT id FROM photos WHERE account_id=?').bind(account.id).all();
     const available=new Set(photos.results.map(p=>p.id));
     if(state.entries.some(entry=>entry.photoId&&!available.has(entry.photoId)))fail(400,'Nejdříve nahraj všechny fotografie.');

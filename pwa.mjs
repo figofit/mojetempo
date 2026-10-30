@@ -18,7 +18,7 @@ function showUpdate(worker) {
 
 function hasUnsavedForm() {
   if (document.querySelector('dialog[open]')) return true;
-  const fields = document.querySelectorAll('#settings-form input, #plan-form input, #plan-form select');
+  const fields = document.querySelectorAll('#settings-form input, #plan-form input, #plan-form select, #rest-form input, #rhythm-form input');
   return [...fields].some(field => field.tagName==='SELECT'
     ? field.value !== ([...field.options].find(option=>option.defaultSelected)||field.options[0])?.value
     : field.value !== field.defaultValue);

@@ -209,6 +209,30 @@ test('account writes preserve weekly plans and completion checks with independen
   }finally{f.sqlite.close();}
 });
 
+test('old installed clients preserve newer optional settings and explicit clearing still works',async()=>{
+  const f=await fixture();
+  try {
+    const current=(await f.request('/api/diary',{user:f.owner})).body;
+    Object.assign(current.state.settings,{trainingSince:'2016-10-23',restPeriods:[{id:'pause-test',start:'2026-10-29',end:'2026-11-03',label:'Volněji'}],habits:['mobility']});
+    current.state.entries=[{id:'mobility-test',createdAt:'2026-10-29T12:00:00Z',date:'2026-10-29',type:'mobility',duration:15,title:'Mobilita',mobilityExercises:['dead-bug','custom:Moje kyčle']}];
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:current})).status,200);
+    const legacy=(await f.request('/api/diary',{user:f.owner})).body;
+    for(const key of ['trainingSince','restPeriods','habits'])delete legacy.state.settings[key];
+    legacy.state.settings.weeklyMinutes=180;
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:legacy})).status,200);
+    const restored=(await f.request('/api/diary',{user:f.owner})).body;
+    for(const key of ['trainingSince','restPeriods','habits'])assert.deepEqual(restored.state.settings[key],current.state.settings[key]);
+    assert.deepEqual(restored.state.entries[0].mobilityExercises,current.state.entries[0].mobilityExercises);
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:legacy})).status,409);
+    restored.state.settings.restPeriods=[];restored.state.settings.trainingSince='';
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:restored})).status,200);
+    assert.deepEqual((await f.request('/api/diary',{user:f.owner})).body.state.settings.restPeriods,[]);
+    const invalid=(await f.request('/api/diary',{user:f.owner})).body;
+    invalid.state.entries[0].mobilityExercises=['not-an-exercise'];
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:invalid})).status,400);
+  }finally{f.sqlite.close();}
+});
+
 test('invitation preview requires an unexpired private code and exposes no claim identity',async()=>{
   const f=await fixture();
   try {

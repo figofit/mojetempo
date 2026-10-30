@@ -138,9 +138,24 @@ with tempfile.TemporaryDirectory(prefix='tempo-daily-tools-') as temporary:
             close_entry()
 
             # Mobility has a separate label within the recovery module.
+            page.evaluate("location.hash='modules'")
+            page.locator('.habit-settings').wait_for(state='visible')
+            page.locator('[data-habit="mobility"]').check(force=True)
+            wait_setting(None, 'd.settings.habits.includes("mobility")')
             route('overview')
             page.locator('.today-actions [data-type="mobility"]').click()
             check('mobility quick log selects its own recovery type',page.locator('#entry-type').input_value()=='mobility' and not page.locator('#strength-fields').is_visible())
+            page.locator('#entry-form [name="duration"]').fill('15')
+            page.locator('[data-mobility-id="dead-bug"]').check()
+            page.locator('[data-mobility-id="child-pose"]').check()
+            page.locator('#mobility-custom').fill('Moje kyčle')
+            page.locator('#save-entry').click()
+            page.locator('#entry-dialog').wait_for(state='hidden')
+            mobility_entry=diary()['entries'][-1]
+            check('mobility exercises and personal names save and tick the optional daily routine',mobility_entry['mobilityExercises']==['dead-bug','child-pose','custom:Moje kyčle'] and any(c['id']==today+':mobility' for c in diary()['settings']['habitChecks']))
+            page.evaluate("location.hash='diary'")
+            page.locator(f'[data-action="edit"][data-id="{mobility_entry["id"]}"]').click()
+            check('editing mobility restores the exact selected exercise names',page.locator('[data-mobility-id="dead-bug"]').is_checked() and page.locator('#mobility-custom').input_value()=='Moje kyčle')
             close_entry()
 
             # Small optional habits stay collapsed and never create fake exercise.
@@ -156,13 +171,14 @@ with tempfile.TemporaryDirectory(prefix='tempo-daily-tools-') as temporary:
             page.locator('.today-habits summary').click()
             page.locator('[data-action="toggle-habit"][data-habit-id="vitamins"]').click()
             page.wait_for_function('document.querySelector("[data-habit-id=vitamins]")?.getAttribute("aria-pressed")==="true"')
-            check('checking vitamins preserves the open section and creates no activity', page.locator('.today-habits').evaluate('(el)=>el.open') and len(diary()['entries'])==count_before_habits and diary()['settings']['habitChecks'][0]['habitId']=='vitamins')
+            check('checking vitamins preserves the open section and creates no activity', page.locator('.today-habits').evaluate('(el)=>el.open') and len(diary()['entries'])==count_before_habits and any(c['habitId']=='vitamins' for c in diary()['settings']['habitChecks']))
 
             # Goals and other setting collections must not overwrite one another.
             before = diary()['settings']
             route('settings')
             page.locator('#settings-form [name="weeklyMinutes"]').fill('180')
             page.locator('#settings-form [name="name"]').fill('Já <IT FIT>')
+            page.locator('#settings-form [name="trainingSince"]').fill('2016-10-23')
             page.locator('#settings-form [type="submit"]').click()
             wait_setting(None, 'd.settings.weeklyMinutes===180')
             after = diary()['settings']
@@ -172,8 +188,42 @@ with tempfile.TemporaryDirectory(prefix='tempo-daily-tools-') as temporary:
             page.reload(wait_until='networkidle')
             check('all new settings survive a full application reload', all(diary()['settings'][key] == after[key] for key in ['favoriteExercises', 'customExercises', 'weeklyPlan', 'planChecks','habits','habitChecks']))
 
+            # A rest period pauses obligations while preserving actual diary records.
+            route('settings')
+            before_pause=diary()['entries']
+            page.locator('.rest-settings details').evaluate('(el)=>el.open=true')
+            page.locator('#rest-form [name="label"]').fill('Klidnější týden')
+            page.locator('#rest-form [type="submit"]').click()
+            wait_setting(None,'d.settings.restPeriods.length===1')
+            route('overview')
+            check('rest mode replaces goal pressure and preserves every actual entry','Klidnější týden' in page.locator('.goal-card').inner_text() and diary()['entries']==before_pause and page.locator('.plan-today .plan-check:disabled').count()==2)
+            page.evaluate("location.hash='stats'")
+            page.locator('.journey-panel').wait_for(state='visible')
+            check('long term calendar history and paused goals appear in statistics','Pauza' in page.locator('.stat-grid').first.inner_text() and page.locator('.journey-counts strong').first.inner_text()=='10')
+            route('overview')
+            page.locator('[data-action="end-rest"]').click()
+            page.wait_for_function('!document.querySelector("[data-action=end-rest]")')
+            check('ending rest reactivates the existing plan checks',page.locator('.plan-today .plan-check:disabled').count()==0 and len(diary()['settings']['planChecks'])==1)
+
+            # The rhythm preview is read-only until explicitly applied.
+            route('plan')
+            existing_plan=diary()['settings']['weeklyPlan']
+            page.locator('.rhythm-builder').evaluate('(el)=>el.open=true')
+            page.locator('#rhythm-form [type="submit"]').click()
+            page.locator('[data-action="apply-rhythm"]').wait_for(state='visible')
+            check('rhythm preview shows seven days without changing the saved plan',page.locator('.rhythm-preview-days>div').count()==7 and diary()['settings']['weeklyPlan']==existing_plan)
+            page.locator('[data-action="apply-rhythm"]').click()
+            wait_setting(None,'d.settings.weeklyPlan.length===7')
+            check('applying the rhythm preserves personal work items and actual activity records',any(p['id']==plan_id for p in diary()['settings']['weeklyPlan']) and diary()['entries']==before_pause and page.locator('.plan-day').count()==7)
+            old_heading=page.locator('.week-navigation span').inner_text()
+            page.locator('[data-action="plan-next"]').click()
+            check('week navigation updates the visible calendar',page.locator('.week-navigation span').inner_text()!=old_heading)
+            page.locator('[data-action="plan-today"]').click()
+
             # The same flows fit a normal mobile viewport without horizontal scroll.
             page.set_viewport_size({'width': 390, 'height': 844})
+            check('colorful week fits a mobile viewport',page.evaluate('()=>document.documentElement.scrollWidth<=window.innerWidth'))
+            page.screenshot(path='/tmp/tempo-week-mobile.png',full_page=True)
             route('overview')
             check('Today and personal plan fit mobile width', page.evaluate('()=>document.documentElement.scrollWidth<=window.innerWidth'))
             page.locator('.today-actions [data-action="quick-entry"][data-type="strength"]').click()

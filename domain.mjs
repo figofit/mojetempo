@@ -1,4 +1,6 @@
 /** Framework-free activity journal rules. Dates are local calendar dates. */
+import {validMobilityExercises,mobilityExerciseNames} from './mobility-catalog.mjs';
+import {activeRest} from './schedule-rules.mjs';
 export const ACTIVITY_TYPES = Object.freeze([
   { id: 'strength', label: 'Posilovna', icon: 'dumbbell', category: 'movement', color: '#487766', unit: 'min' },
   { id: 'cycling', label: 'Kolo', icon: 'bike', category: 'movement', color: '#90a96b', unit: 'min' },
@@ -129,6 +131,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   planChecks: Object.freeze([]),
   habits: Object.freeze([]),
   habitChecks: Object.freeze([]),
+  trainingSince: '',
+  restPeriods: Object.freeze([]),
 });
 
 const typeById = new Map(ACTIVITY_TYPES.map((type) => [type.id, type]));
@@ -201,6 +205,11 @@ export function validateEntry(input, today = localDate()) {
     else location={name:place.name.trim(),latitude:place.latitude,longitude:place.longitude};
   }
   let workout;
+  let mobilityExercises;
+  if(input.mobilityExercises!==undefined) {
+    if(input.type!=='mobility'||!validMobilityExercises(input.mobilityExercises))errors.push('Cviky mobility patří k mobilitě. Vyber nejvýše 50 různých cviků; vlastní názvy mohou mít do 100 znaků.');
+    else mobilityExercises=[...input.mobilityExercises];
+  }
   if(input.workout!=null) {
     const w=input.workout;
     if(!['strength','home'].includes(input.type)||!w||typeof w!=='object'||!WORKOUT_FOCUSES.some(f=>f.id===w.focus)||!Array.isArray(w.exercises)||w.exercises.length>50) errors.push('Silový trénink potřebuje platné zaměření a nejvýše 50 cviků.');
@@ -232,6 +241,7 @@ export function validateEntry(input, today = localDate()) {
   if (typeof input.photoId === 'string' && input.photoId) entry.photoId = input.photoId;
   if (location) entry.location = location;
   if (workout) entry.workout = workout;
+  if (mobilityExercises) entry.mobilityExercises = mobilityExercises;
   return { valid: errors.length === 0, errors, entry };
 }
 
@@ -320,6 +330,7 @@ export function generateInsights(entries = [], settings = DEFAULT_SETTINGS, date
   const stats = computeStats(entries, settings, date);
   if (!entries.length) return ['Začni jedním zápisem. Přehled se postupně přizpůsobí tomu, co skutečně děláš.'];
   const insights = [];
+  if(activeRest(settings,localDate(date)))return ['Plnění plánu a cílů má teď pauzu. Skutečné zápisy zůstávají ve všech přehledech.',`Tento týden máš zapsáno ${stats.weekMinutes} minut pohybu a ${stats.weekRecovery} regeneračních aktivit.`];
   if (!stats.weekDaily.some((day) => day.hasActivity)) {
     insights.push('Tento týden zatím nemáš žádný zápis. I krátká procházka nebo chvíle odpočinku se počítá.');
   } else if (settings?.modules?.includes('movement') && stats.weekGoalPercent >= 100) {
@@ -349,8 +360,8 @@ function csvCell(value) {
 }
 
 export function exportCSV(entries = []) {
-  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka', 'Zaměření tréninku', 'Cviky a pracovní série']];
-  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '',workoutLabel(entry.workout),workoutExercises(entry.workout)]);
+  const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka', 'Zaměření tréninku', 'Cviky a pracovní série', 'Cviky mobility']];
+  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '',workoutLabel(entry.workout),workoutExercises(entry.workout),mobilityExerciseNames(entry.mobilityExercises||[]).join(', ')]);
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(';')).join('\r\n')}\r\n`;
 }
 
@@ -392,7 +403,7 @@ export function exportICS(entries = []) {
   for (const entry of entries) {
     const day = parseDate(entry.date);
     if (!day) continue;
-    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', workoutLabel(entry.workout),workoutExercises(entry.workout),entry.note].filter(Boolean).join('\n');
+    const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', workoutLabel(entry.workout),workoutExercises(entry.workout),mobilityExerciseNames(entry.mobilityExercises||[]).join(', '),entry.note].filter(Boolean).join('\n');
     lines.push(
       'BEGIN:VEVENT',
       `UID:${encodeURIComponent(String(entry.id || `${entry.date}-${entry.type}`))}@mojetempo.local`,
