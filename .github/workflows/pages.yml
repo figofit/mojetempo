@@ -172,6 +172,7 @@ jobs:
   verify-cloudflare:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -189,6 +190,7 @@ jobs:
         env:
           TEMPO_BASE_URL: https://${{ matrix.hostname }}/
           TEMPO_REQUIRE_DATABASE: '1'
+          TEMPO_READY_TIMEOUT_SECONDS: '600'
         run: python3 scripts/verify_ready.py
       - name: Verify actual published Cloudflare application
         shell: bash
