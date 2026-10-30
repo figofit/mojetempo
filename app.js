@@ -1,5 +1,7 @@
 import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, workoutLabel, localDate, validateEntry, computeStats, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
-import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview } from './storage.mjs';
+import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
+import { renderInvitation } from './invitation.mjs';
+import { habitSettings, renderTodayHabits, renderHabitSettings, toggleHabit } from './habits.mjs';
 import { planningSettings, renderTodayPlan, renderWeeklyPlan, renderPlanEditor, handlePlanAction, handlePlanSubmit } from './planning.mjs';
 import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
@@ -41,7 +43,7 @@ const dateText = (date, options = {}) => new Date(`${date}T12:00:00`).toLocaleDa
 const typeById = id => ACTIVITY_TYPES.find(type => type.id === id);
 const moduleOn = id => state.settings.modules.includes(id);
 const entries = () => demo ? demoEntries : state.entries;
-const views = {overview:'Přehled',plan:'Můj plán',diary:'Deník aktivit',chronicle:'Moje kronika',stats:'Statistiky',modules:'Moje moduly',settings:'Cíle a nastavení'};
+const views = {overview:'Přehled',plan:'Můj plán',diary:'Deník aktivit',chronicle:'Moje kronika',stats:'Statistiky',modules:'Moje moduly',settings:'Cíle a nastavení',invite:'Pozvánka'};
 const viewIcons = {overview:'grid',plan:'calendar',diary:'book',chronicle:'image',stats:'chart',modules:'layers'};
 let state = {version:1,entries:[],settings:{...DEFAULT_SETTINGS, modules:[...DEFAULT_SETTINGS.modules]},onboardingComplete:false};
 let demo = false;
@@ -57,6 +59,8 @@ let editingEntryId=null,authMode='login',settingsDirty=false,placeResults=[],pla
 let strengthPeriod='week';
 let exerciseFilter='all', exerciseQuery='', planDirty=false;
 let renderedAccountRole;
+let habitsOpen=false;
+let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const syncChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('moje-tempo-updates') : null;
 
@@ -128,8 +132,8 @@ function empty(message = 'Tvůj příběh začíná prvním zápisem.', button =
 function renderToday() {
   const today=localDate(), daily=visibleEntries().filter(entry=>entry.date===today);
   const minutes=daily.filter(entry=>typeById(entry.type).category==='movement').reduce((sum,entry)=>sum+entry.duration,0);
-  const quick=[['strength','Fitko','dumbbell'],['cycling','Kolo','bike'],['walking','Procházka','footprints'],['hiking','Výšlap','mountain'],['recovery','Mobilita / protažení','moon'],['cardio','Bazén / kardio','heart']].filter(([type])=>moduleOn(typeById(type).category));
-  return `<section class="panel today-panel"><div class="panel-header"><div><span class="eyebrow">MALÝ ZÁPIS, VELKÝ ROZDÍL</span><h2 class="panel-title">Dnes</h2><p class="panel-subtitle">${daily.length?`${daily.length} zápisů${moduleOn('movement')?` · ${minutes} minut pohybu`:''}`:'Jaký bude tvůj dnešní malý krok?'}</p></div><span class="tag">${dateText(today,{month:'short'})}</span></div><div class="today-actions">${quick.map(([type,label,symbol])=>`<button class="button secondary small" data-action="quick-entry" data-type="${type}" ${label==='Mobilita / protažení'?'data-title="Mobilita / protažení"':label==='Bazén / kardio'?'data-title="Bazén / kardio"':''}>${icon(symbol)}${label}</button>`).join('')}${moduleOn('steps')?`<button class="button ghost small" data-action="yesterday-steps">${icon('footprints')}Doplnit včerejší kroky</button>`:''}</div>${daily.length?`<div class="today-records">${daily.slice(0,4).map(entry=>`<button class="today-record" data-action="${demo?'quick-entry':'edit'}" data-type="${entry.type}" data-id="${esc(entry.id)}">${icon('check')}<span>${esc(entry.title||typeById(entry.type).label)}</span><small>${entry.type==='steps'?`${number(entry.steps)} kroků`:entry.duration?`${entry.duration} min`:'moment'}</small></button>`).join('')}</div>`:''}</section>${renderTodayPlan(state.settings)}`;
+  const quick=[['strength','Fitko','dumbbell'],['cycling','Kolo','bike'],['walking','Procházka','footprints'],['hiking','Výšlap','mountain'],['mobility','Mobilita / protažení','sparkles'],['cardio','Bazén / kardio','heart']].filter(([type])=>moduleOn(typeById(type).category));
+  return `<section class="panel today-panel"><div class="panel-header"><div><span class="eyebrow">MALÝ ZÁPIS, VELKÝ ROZDÍL</span><h2 class="panel-title">Dnes</h2><p class="panel-subtitle">${daily.length?`${daily.length} zápisů${moduleOn('movement')?` · ${minutes} minut pohybu`:''}`:'Jaký bude tvůj dnešní malý krok?'}</p></div><span class="tag">${dateText(today,{month:'short'})}</span></div><div class="today-actions">${quick.map(([type,label,symbol])=>`<button class="button secondary small" data-action="quick-entry" data-type="${type}" ${label==='Mobilita / protažení'?'data-title="Mobilita / protažení"':label==='Bazén / kardio'?'data-title="Bazén / kardio"':''}>${icon(symbol)}${label}</button>`).join('')}${moduleOn('steps')?`<button class="button ghost small" data-action="yesterday-steps">${icon('footprints')}Doplnit včerejší kroky</button>`:''}</div>${daily.length?`<div class="today-records">${daily.slice(0,4).map(entry=>`<button class="today-record" data-action="${demo?'quick-entry':'edit'}" data-type="${entry.type}" data-id="${esc(entry.id)}">${icon('check')}<span>${esc(entry.title||typeById(entry.type).label)}</span><small>${entry.type==='steps'?`${number(entry.steps)} kroků`:entry.duration?`${entry.duration} min`:'moment'}</small></button>`).join('')}</div>`:''}${renderTodayHabits(state.settings,localDate(),habitsOpen)}</section>${renderTodayPlan(state.settings)}`;
 }
 
 function renderPlan() {
@@ -140,11 +144,11 @@ function renderOverview(stats) {
   const count=stats.weekSessions;
   const insights=generateInsights(visibleEntries(),state.settings);
   const recent=stats.recentEntries.slice(0,4);
-  const goal=moduleOn('movement')?{title:'TÝDENNÍ CÍL POHYBU',percent:stats.weekGoalPercent,value:stats.weekMinutes,target:state.settings.weeklyMinutes,unit:'minut'}:moduleOn('recovery')?{title:'TÝDENNÍ CÍL REGENERACE',percent:stats.weekRecovery/state.settings.weeklyRecovery*100,value:stats.weekRecovery,target:state.settings.weeklyRecovery,unit:'návštěv'}:moduleOn('steps')?{title:'DNEŠNÍ CÍL KROKŮ',percent:stats.todaySteps/state.settings.dailySteps*100,value:stats.todaySteps,target:state.settings.dailySteps,unit:'kroků'}:null;
+  const goal=moduleOn('movement')?{title:'TÝDENNÍ CÍL POHYBU',percent:stats.weekGoalPercent,value:stats.weekMinutes,target:state.settings.weeklyMinutes,unit:'minut'}:moduleOn('recovery')?{title:'TÝDENNÍ CÍL REGENERACE',percent:stats.weekRecovery/state.settings.weeklyRecovery*100,value:stats.weekRecovery,target:state.settings.weeklyRecovery,unit:'aktivit'}:moduleOn('steps')?{title:'DNEŠNÍ CÍL KROKŮ',percent:stats.todaySteps/state.settings.dailySteps*100,value:stats.todaySteps,target:state.settings.dailySteps,unit:'kroků'}:null;
   return `${heading('Každý pohyb se počítá.', 'Přehled tvého úsilí. Vlastním tempem, den za dnem.')}${renderToday()}
     <div class="hero-grid"><section class="hero-card"><div class="hero-copy"><span class="hero-kicker">TVOJE CESTA, TVOJE PRAVIDLA</span><h2>Dobře se hýbat.<br>Dobře se cítit.</h2><p>Trénink, kolo i zasloužený odpočinek.<br>Malé momenty, které tvoří velký příběh.</p><button class="button hero-button" data-action="add">Přidat dnešní moment ${icon('arrow')}</button></div><div class="hero-visual" aria-hidden="true"><svg viewBox="0 0 260 230" fill="none"><circle cx="150" cy="108" r="92" stroke="#ffffff" stroke-opacity=".12"/><circle cx="150" cy="108" r="67" stroke="#ffffff" stroke-opacity=".12"/><path d="M32 180C55 100 96 193 119 110S173 153 209 52" stroke="#c5edb3" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="180" r="8" fill="#c5edb3"/><circle cx="119" cy="110" r="8" fill="#c5edb3"/><circle cx="209" cy="52" r="11" fill="#c5edb3"/><circle cx="209" cy="52" r="21" stroke="#c5edb3" stroke-opacity=".4"/><path d="m180 181 7 7 14-15" stroke="#c5edb3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="166" y="159" width="50" height="43" rx="14" stroke="#ffffff" stroke-opacity=".2"/></svg><span class="hero-badge">${icon('sparkles')} Malé kroky. Skutečný posun.</span></div></section>
     <section class="goal-card"><div>${goal?`<span class="eyebrow">${goal.title}</span>${ring(goal.percent,'splněno',true)}<p><strong>${number(goal.value)}</strong> z ${number(goal.target)} ${goal.unit}</p><button class="button ghost small" data-view="settings">Upravit cíl ${icon('arrow')}</button>`:`<span class="eyebrow">TVŮJ OSOBNÍ PROSTOR</span><h2>Moment po momentu.</h2><p>Kronika uchová, co si chceš zapamatovat.</p><button class="button ghost small" data-view="chronicle">Otevřít kroniku ${icon('arrow')}</button>`}</div></section></div>
-    <div class="stat-grid">${moduleOn('movement')?statCard('clock','Minuty pohybu',number(stats.weekMinutes),'min',`Tento týden · cíl ${number(state.settings.weeklyMinutes)} min`)+statCard('dumbbell','Pohybové aktivity',number(count),'',`${stats.daysActive} aktivních dní · cíl ${state.settings.weeklySessions} aktivit`):''}${moduleOn('recovery')?statCard('moon','Čas na regeneraci',number(stats.weekRecovery),'×',`Tento týden · cíl ${state.settings.weeklyRecovery} návštěvy`,'#ae835d'):''}${moduleOn('steps')?statCard('footprints','Dnešní kroky',number(stats.todaySteps),'',`Zapsané aktivity · cíl ${number(state.settings.dailySteps)}`,'#6388b6'):''}</div>
+    <div class="stat-grid">${moduleOn('movement')?statCard('clock','Minuty pohybu',number(stats.weekMinutes),'min',`Tento týden · cíl ${number(state.settings.weeklyMinutes)} min`)+statCard('dumbbell','Pohybové aktivity',number(count),'',`${stats.daysActive} aktivních dní · cíl ${state.settings.weeklySessions} aktivit`):''}${moduleOn('recovery')?statCard('moon','Regenerační aktivity',number(stats.weekRecovery),'×',`Tento týden · cíl ${state.settings.weeklyRecovery} aktivity`,'#ae835d'):''}${moduleOn('steps')?statCard('footprints','Dnešní kroky',number(stats.todaySteps),'',`Zapsané aktivity · cíl ${number(state.settings.dailySteps)}`,'#6388b6'):''}</div>
     <div class="dashboard-grid"><section class="panel">${weekChart(stats)}</section><section class="panel compact-calendar">${monthCalendar(stats)}</section></div>
     <div class="dashboard-grid"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Poslední aktivity</h2><p class="panel-subtitle">Malé zápisy, které se neztratí.</p></div><button class="button ghost small" data-view="diary">Celý deník ${icon('arrow')}</button></div><div class="activity-list">${recent.length?recent.map(entry=>activityRow(entry)).join(''):empty()}</div></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Chvilka pro bilanci</h2><p class="panel-subtitle">Postřehy z tvých záznamů.</p></div>${icon('sparkles')}</div><div class="insights-list">${insights.slice(0,3).map((insight,index)=>`<article class="insight-card"><span class="insight-icon">${icon(['target','moon','heart'][index])}</span><p>${esc(insight)}</p></article>`).join('')}</div><small class="form-hint">Pravidla podle záznamů. Bez hodnocení zdraví nebo AI rozboru.</small></section></div>`;
 }
@@ -170,7 +174,7 @@ function renderStats(stats) {
 
 function renderModules() {
   const symbols={movement:'dumbbell',recovery:'moon',steps:'footprints',chronicle:'image'};
-  return `${heading('Vyber si svoje tempo.', 'Zapni jen to, co ti dává smysl. Ostatní může počkat.','<span class="tag">'+state.settings.modules.length+' aktivní moduly</span>')}<div class="module-grid">${MODULES.map(module=>`<article class="module-card"><div class="panel-header"><span class="stat-icon">${icon(symbols[module.id])}</span><label class="switch"><input class="switch-input" type="checkbox" data-module="${module.id}" ${moduleOn(module.id)?'checked':''} aria-label="Modul ${esc(module.label)}"/><span></span></label></div><h2>${esc(module.label)}</h2><p>${esc(module.description)}</p><span class="tag">${moduleOn(module.id)?'Zapnuto':'Vypnuto'}</span></article>`).join('')}</div><div class="form-notice">${icon('shield')}Vypnutím modulu se tvé záznamy nesmažou. Kdykoliv se k nim můžeš vrátit. Soukromá záloha vždy obsahuje všechny moduly.</div>`;
+  return `${heading('Vyber si svoje tempo.', 'Zapni jen to, co ti dává smysl. Ostatní může počkat.','<span class="tag">'+state.settings.modules.length+' aktivní moduly</span>')}<div class="module-grid">${MODULES.map(module=>`<article class="module-card"><div class="panel-header"><span class="stat-icon">${icon(symbols[module.id])}</span><label class="switch"><input class="switch-input" type="checkbox" data-module="${module.id}" ${moduleOn(module.id)?'checked':''} aria-label="Modul ${esc(module.label)}"/><span></span></label></div><h2>${esc(module.label)}</h2><p>${esc(module.description)}</p><span class="tag">${moduleOn(module.id)?'Zapnuto':'Vypnuto'}</span></article>`).join('')}</div>${renderHabitSettings(state.settings)}<div class="form-notice">${icon('shield')}Vypnutím modulu se tvé záznamy nesmažou. Kdykoliv se k nim můžeš vrátit. Soukromá záloha vždy obsahuje všechny moduly.</div>`;
 }
 
 function renderPlaces() {
@@ -205,7 +209,7 @@ async function showAdminOverview(offset=0) {
 }
 
 function renderSettings() {
-  return `${heading('Cíle, které sedí tobě.', 'Nastav si vlastní měřítko. A postupně ho přizpůsobuj.','<span class="tag">Osobní nastavení</span>')}${renderAccountSettings()}${renderAdminSettings()}<div class="settings-layout"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Moje cíle</h2><p class="panel-subtitle">Cíle slouží jako orientace, ne jako hodnocení.</p></div>${icon('target')}</div><form id="settings-form" class="settings-form"><div class="form-grid"><label class="form-field">Pohyb za týden (minuty)<input name="weeklyMinutes" type="number" min="1" max="10080" step="1" required value="${state.settings.weeklyMinutes}"/></label><label class="form-field">Pohybové aktivity za týden<input name="weeklySessions" type="number" min="1" max="100" step="1" required value="${state.settings.weeklySessions}"/></label><label class="form-field">Regenerace za týden (návštěvy)<input name="weeklyRecovery" type="number" min="1" max="100" step="1" required value="${state.settings.weeklyRecovery}"/></label><label class="form-field">Denní cíl kroků<input name="dailySteps" type="number" min="1" max="200000" step="1" required value="${state.settings.dailySteps}"/></label></div><h3>Cílové poměry pracovních sérií</h3><p class="form-hint">Orientační srovnání za celé období. Přizpůsob si ho svému programu nebo doporučení trenéra.</p><div class="form-grid"><label class="form-field">Tahů na 1 sérii tlaků<input name="strengthPullPerPush" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthPullPerPush??1}" /></label><label class="form-field">Hinge na 1 sérii dřepů<input name="strengthHingePerSquat" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthHingePerSquat??1}" /></label></div><button type="submit" class="button primary">Uložit cíle</button></form></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Tvá data jsou tvoje.</h2><p class="panel-subtitle">${getAccount().user?'Záloha obsahuje i záznamy tvého účtu.':'Záznamy a fotky zůstávají v tomto prohlížeči.'}</p></div>${icon('shield')}</div><p class="settings-copy">Záloha JSON obsahuje všechny záznamy, cíle, moduly i fotografie. Stáhni si ji před změnou zařízení, adresy aplikace nebo smazáním dat prohlížeče.</p><div class="export-buttons"><button class="button secondary" data-action="backup">${icon('download')}Stáhnout celou zálohu</button><button class="button secondary" data-action="import">${icon('upload')}Obnovit ze zálohy</button><button class="button ghost" data-action="ics">${icon('calendar')}Export pro Google Kalendář (.ics)</button></div><p class="form-hint">Kalendář se importuje ručně. Import stejného souboru do kalendáře může vytvořit duplicity.</p></section></div>`;
+  return `${heading('Cíle, které sedí tobě.', 'Nastav si vlastní měřítko. A postupně ho přizpůsobuj.','<span class="tag">Osobní nastavení</span>')}${renderAccountSettings()}${renderAdminSettings()}<div class="settings-layout"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Moje cíle</h2><p class="panel-subtitle">Cíle slouží jako orientace, ne jako hodnocení.</p></div>${icon('target')}</div><form id="settings-form" class="settings-form"><label class="form-field">Jméno v mém deníku<input name="name" maxlength="80" required value="${esc(state.settings.name)}" /></label><div class="form-grid"><label class="form-field">Pohyb za týden (minuty)<input name="weeklyMinutes" type="number" min="1" max="10080" step="1" required value="${state.settings.weeklyMinutes}"/></label><label class="form-field">Pohybové aktivity za týden<input name="weeklySessions" type="number" min="1" max="100" step="1" required value="${state.settings.weeklySessions}"/></label><label class="form-field">Regenerace za týden (aktivity)<input name="weeklyRecovery" type="number" min="1" max="100" step="1" required value="${state.settings.weeklyRecovery}"/></label><label class="form-field">Denní cíl kroků<input name="dailySteps" type="number" min="1" max="200000" step="1" required value="${state.settings.dailySteps}"/></label></div><h3>Cílové poměry pracovních sérií</h3><p class="form-hint">Orientační srovnání za celé období. Přizpůsob si ho svému programu nebo doporučení trenéra.</p><div class="form-grid"><label class="form-field">Tahů na 1 sérii tlaků<input name="strengthPullPerPush" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthPullPerPush??1}" /></label><label class="form-field">Hinge na 1 sérii dřepů<input name="strengthHingePerSquat" type="number" min="0.25" max="4" step="0.25" required value="${state.settings.strengthHingePerSquat??1}" /></label></div><button type="submit" class="button primary">Uložit cíle</button></form></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Tvá data jsou tvoje.</h2><p class="panel-subtitle">${getAccount().user?'Záloha obsahuje i záznamy tvého účtu.':'Záznamy a fotky zůstávají v tomto prohlížeči.'}</p></div>${icon('shield')}</div><p class="settings-copy">Záloha JSON obsahuje všechny záznamy, cíle, moduly i fotografie. Stáhni si ji před změnou zařízení, adresy aplikace nebo smazáním dat prohlížeče.</p><div class="export-buttons"><button class="button secondary" data-action="backup">${icon('download')}Stáhnout celou zálohu</button><button class="button secondary" data-action="import">${icon('upload')}Obnovit ze zálohy</button><button class="button ghost" data-action="ics">${icon('calendar')}Export pro Google Kalendář (.ics)</button></div><p class="form-hint">Kalendář se importuje ručně. Import stejného souboru do kalendáře může vytvořit duplicity.</p></section></div>`;
 }
 
 async function hydratePhotos(revision) {
@@ -229,9 +233,10 @@ function render() {
   $('#settings-nav').classList.toggle('active',currentView==='settings');
   $('#demo-toggle').innerHTML=icon('eye')+(demo?'Zpět do mého deníku':'Prohlédnout ukázku');
   $('#privacy-label').innerHTML=icon('shield')+'Jen pro tebe';
+  $('.sidebar-profile strong').textContent=state.settings.name||'Moje tempo';
   $('#breadcrumb-current').textContent=views[currentView];
   $('#demo-banner').innerHTML=demo?'<div class="demo-banner"><div><strong>Prohlížíš ukázkový deník.</strong> Tyto aktivity jsou pouze ilustrační.</div><button class="button small secondary" data-action="start-own">Začít vlastní deník '+icon('arrow')+'</button></div>':'';
-  const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings};
+  const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   $('#view-content').innerHTML=renderers[currentView]();
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;
@@ -240,6 +245,13 @@ function render() {
 }
 
 function navigate(view) {
+  const incoming=/^pozvanka=([A-Za-z0-9_-]{43})$/.exec(view);
+  if(incoming) {
+    currentView='invite';settingsDirty=false;planDirty=false;invitationCode=incoming[1];invitationData=null;invitationError='';
+    const revision=++invitationRevision;render();
+    previewInvitation(invitationCode).then(data=>{if(invitationRevision===revision){invitationData=data;if(currentView==='invite')render();}}).catch(error=>{if(invitationRevision===revision){invitationError=error.message;if(currentView==='invite')render();}});
+    return;
+  }
   const next=Object.hasOwn(views,view)?view:'overview';
   if(currentView!==next){settingsDirty=false;planDirty=false;}
   currentView=next;
@@ -460,8 +472,9 @@ async function removeEntry(id) {
 function validatedSettings(input) {
   const limits={weeklyMinutes:10080,weeklySessions:100,weeklyRecovery:100,dailySteps:200000};
   const output={...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]};
+  if(input?.name!==undefined){if(typeof input.name!=='string'||!input.name.trim()||input.name.trim().length>80)throw new Error('Jméno v deníku může mít 1 až 80 znaků.');output.name=input.name.trim();}
   Object.assign(output,strengthTargets(input));
-  Object.assign(output,librarySettings(input),planningSettings(input));
+  Object.assign(output,librarySettings(input),planningSettings(input),habitSettings(input));
   for(const [key,max] of Object.entries(limits)) {
     const value=Number(input?.[key]);
     if(!Number.isInteger(value)||value<1||value>max) throw new Error('Cíle musí být celá kladná čísla v povoleném rozsahu.');
@@ -562,6 +575,17 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(name==='invite-register'){openAccount();setAuthMode('register');return;}
+  if(name==='accept-invitation'){
+    element.disabled=true;
+    try {await acceptInvitation(invitationCode);state=(await loadState())||emptyDiary();invitationCode='';invitationData=null;invitationRevision++;demo=false;history.replaceState(null,'','#chronicle');navigate('chronicle');notify('Milník je uložený ve tvé kronice.');}
+    finally{if(element.isConnected)element.disabled=false;}
+    return;
+  }
+  if(name==='toggle-habit'){
+    await persist(current=>({...current,settings:{...current.settings,...toggleHabit(current.settings,element.dataset.habitId)},onboardingComplete:true}));
+    demo=false;habitsOpen=true;render();return;
+  }
   if(await handlePlanAction(name,element,planCallbacks()))return;
   if(['select-exercise','favorite-exercise','save-custom-exercise','delete-custom-exercise'].includes(name)){await changeLibrary(name,element);return;}
   if(name==='quick-entry')await openEntry(null,{type:element.dataset.type,title:element.dataset.title});
@@ -582,7 +606,7 @@ async function action(name,element) {
   if(name==='close-account')$('#account-dialog').close();
   if(name==='download-recovery')download($('#recovery-code').value,'moje-tempo-obnovovaci-klic.txt','text/plain');
   if(name==='sync-account'){await syncCloud();if(!$('#entry-dialog').open&&!settingsDirty&&!planDirty)await refreshDiary();}
-  if(name==='logout-account'){if(settingsDirty||planDirty)throw new Error('Nejdříve ulož rozepsané cíle.');await logout();syncChannel?.postMessage('account-changed');await refreshDiary();}
+  if(name==='logout-account'){if(settingsDirty||planDirty)throw new Error('Nejdříve ulož rozepsané cíle.');await logout();syncChannel?.postMessage('account-changed');await refreshDiary();if(invitationCode){invitationData=await previewInvitation(invitationCode);if(currentView==='invite')render();}}
   if(name==='copy-local'&&confirm('Přidat kopii místního deníku do přihlášeného účtu? Původní deník zůstane na zařízení. Opakovaný převod vytvoří další kopie.')){await copyLocalToAccount();await refreshDiary();}
   if(name==='load-server'&&confirm('Nahradit neodeslané změny na tomto zařízení verzí z účtu? Nejdříve si stáhni celou zálohu.')){await loadServerVersion();await refreshDiary();}
   if(name==='close-entry') $('#entry-dialog').close();
@@ -610,9 +634,19 @@ document.addEventListener('click',event=>{
   if(el.dataset.view) {location.hash=el.dataset.view;if(currentView===el.dataset.view)render();}
   if(el.dataset.filter) {activityFilter=el.dataset.filter;render();}
 });
+document.addEventListener('toggle',event=>{if(event.target.matches?.('.today-habits'))habitsOpen=event.target.open;},true);
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1)));
 document.addEventListener('change',async event=>{
   const el=event.target;
+  if(el.dataset.habit) {
+    el.disabled=true;
+    try {
+      const checked=el.checked;
+      await persist(current=>{const habits=checked?[...new Set([...(current.settings.habits||[]),el.dataset.habit])]:(current.settings.habits||[]).filter(id=>id!==el.dataset.habit);return {...current,settings:{...current.settings,...habitSettings({...current.settings,habits})},onboardingComplete:true};});
+      demo=false;render();notify(checked?'Návyk zapnutý v přehledu Dnes.':'Návyk vypnutý. Historie zůstává uložená.');
+    }catch(error){el.checked=!el.checked;el.disabled=false;notify(error.message,true);}
+    return;
+  }
   if(el.dataset.module) {
     el.disabled=true;
     try {
@@ -649,6 +683,7 @@ $('#account-form').addEventListener('submit',async event=>{
     settingsDirty=false;planDirty=false;
     syncChannel?.postMessage('account-changed');
     await refreshDiary();
+    if(invitationCode){invitationData=await previewInvitation(invitationCode);if(currentView==='invite')render();}
     if(result.recoveryCode){$('#recovery-code').value=result.recoveryCode;$('#account-form').classList.add('hidden');$('#recovery-result').classList.remove('hidden');}
     else $('#account-dialog').close();
   }catch(error){$('#account-error').textContent=error.message;}

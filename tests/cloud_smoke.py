@@ -186,11 +186,22 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 windows.locator('#account-profile').filter(has_text=login).wait_for()
                 sync(windows)
                 check('Windows reload keeps the same private plan library and completed day',state(windows)['settings']['planChecks']==paired[0]['planChecks'] and set(state(windows)['settings']['favoriteExercises'])==expected_favorites)
+                # Habits synchronize independently, including two simultaneous offline checks.
+                storage(phone,'await s.updateState(d=>({...d,settings:{...d.settings,habits:["vitamins","protein"]}}))')
+                sync(phone);sync(windows)
+                entries_before_habits=len(state(phone)['entries'])
+                contexts[0].set_offline(True);contexts[1].set_offline(True)
+                for page,habit in [(phone,'vitamins'),(windows,'protein')]:
+                    storage(page,'const h=await import("./habits.mjs");await s.updateState(d=>({...d,settings:{...d.settings,...h.toggleHabit(d.settings,arg)}}))',habit)
+                contexts[0].set_offline(False);contexts[1].set_offline(False)
+                sync(phone);sync(windows);sync(phone)
+                check('independent offline vitamin and protein checks merge between devices without exercise entries',all({check['habitId'] for check in state(page)['settings']['habitChecks']}=={'vitamins','protein'} and len(state(page)['entries'])==entries_before_habits for page in [phone,windows]))
                 phone.goto(base+'/#settings')
                 with phone.expect_download() as download:
                     phone.locator('[data-action="backup"]').click()
                 backup_path=Path(temporary)/'strength-backup.json';download.value.save_as(str(backup_path));backup=json.loads(backup_path.read_text())
                 check('complete backup preserves workout details targets personal library and weekly plan',next(entry for entry in backup['entries'] if entry['id']==strength_entry['id'])['workout']==modified['workout'] and backup['settings']['strengthPullPerPush']==2 and set(backup['settings']['favoriteExercises'])==expected_favorites and backup['settings']['weeklyPlan']==[plan] and len(backup['settings']['planChecks'])==1)
+                check('private backup preserves the optional habits and their daily history',backup['settings']['habits']==['vitamins','protein'] and len(backup['settings']['habitChecks'])==2)
                 if not (run(phone,'()=>document.documentElement.scrollWidth<=innerWidth')):raise AssertionError('Strength controls overflow on mobile')
 
                 check('anonymous requests cannot read diaries',api(stranger,'/api/diary')['status']==401)
@@ -207,6 +218,8 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
                 bad_library=json.loads(json.dumps(remote['state']));bad_library['settings']['favoriteExercises'].append('missing-exercise')
                 bad_plan=json.loads(json.dumps(remote['state']));bad_plan['settings']['weeklyPlan'][0]['weekday']=7
                 check('server independently rejects invalid library references and plan weekdays',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_library})['status']==400 and api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_plan})['status']==400)
+                bad_habit=json.loads(json.dumps(remote['state']));bad_habit['settings']['habitChecks'][0]['habitId']='unknown'
+                check('server independently rejects fabricated habit records',api(phone,'/api/diary','PUT',{'revision':remote['revision'],'state':bad_habit})['status']==400)
                 try:
                     urlopen(Request(base+'/api/logout',data=b'{}',headers={'Content-Type':'application/json','Origin':'https://unrelated.example'},method='POST'))
                     csrf=200

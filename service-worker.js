@@ -15,6 +15,8 @@ const SHELL_PATHS = [
   'sync-rules.mjs',
   'places.mjs',
   'planning.mjs',
+  'habits.mjs',
+  'invitation.mjs',
   'vendor/leaflet/leaflet.js',
   'vendor/leaflet/leaflet.css',
   'vendor/leaflet/LICENSE',

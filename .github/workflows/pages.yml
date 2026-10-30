@@ -76,6 +76,16 @@ jobs:
           cat "$RUNNER_TEMP/tempo-daily-smoke.jsonl"
           python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-daily-smoke.jsonl" --name "Daily logging exercises and plans" --exit-code "$tempo_test_status" || true
           exit "$tempo_test_status"
+      - name: Test private invitations and the initial chronicle moment
+        shell: bash
+        run: |
+          set +e
+          python3 tests/invitation_smoke.py > "$RUNNER_TEMP/tempo-invitation-smoke.jsonl" 2>&1
+          tempo_test_status=$?
+          set -e
+          cat "$RUNNER_TEMP/tempo-invitation-smoke.jsonl"
+          python3 scripts/ci_summary.py --log "$RUNNER_TEMP/tempo-invitation-smoke.jsonl" --name "Private invitation and chronicle" --exit-code "$tempo_test_status" || true
+          exit "$tempo_test_status"
       - name: Test offline use and safe release updates
         shell: bash
         run: |
@@ -117,6 +127,7 @@ jobs:
           path: |
             ${{ runner.temp }}/tempo-browser-smoke.jsonl
             ${{ runner.temp }}/tempo-daily-smoke.jsonl
+            ${{ runner.temp }}/tempo-invitation-smoke.jsonl
             ${{ runner.temp }}/tempo-pwa-smoke.jsonl
             ${{ runner.temp }}/tempo-cloud-smoke.jsonl
             ${{ runner.temp }}/tempo-pages-smoke.jsonl

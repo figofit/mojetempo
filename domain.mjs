@@ -8,6 +8,7 @@ export const ACTIVITY_TYPES = Object.freeze([
   { id: 'home', label: 'Domácí trénink', icon: 'home', category: 'movement', color: '#7296a3', unit: 'min' },
   { id: 'sauna', label: 'Sauna', icon: 'flame', category: 'recovery', color: '#d5ac74', unit: 'min' },
   { id: 'wellness', label: 'Wellness', icon: 'sparkles', category: 'recovery', color: '#a7a0ba', unit: 'min' },
+  { id: 'mobility', label: 'Mobilita / protažení', icon: 'sparkles', category: 'recovery', color: '#82a991', unit: 'min' },
   { id: 'recovery', label: 'Regenerace', icon: 'moon', category: 'recovery', color: '#899ca3', unit: 'min' },
   { id: 'steps', label: 'Kroky', icon: 'footprints', category: 'steps', color: '#6388b6', unit: 'kroků' },
   { id: 'moment', label: 'Moment do kroniky', icon: 'image', category: 'chronicle', color: '#ab886d', unit: '' },
@@ -15,7 +16,7 @@ export const ACTIVITY_TYPES = Object.freeze([
 
 export const MODULES = Object.freeze([
   { id: 'movement', label: 'Pohyb', description: 'Tréninky, kolo, chůze, výšlapy a aktivní minuty.' },
-  { id: 'recovery', label: 'Regenerace', description: 'Sauna, wellness a prostor pro odpočinek.' },
+  { id: 'recovery', label: 'Regenerace', description: 'Mobilita, protažení, sauna, wellness a prostor pro odpočinek.' },
   { id: 'steps', label: 'Kroky', description: 'Denní kroky a pravidelnost v průběhu týdne.' },
   { id: 'chronicle', label: 'Kronika', description: 'Fotky, poznámky a momenty na tvé cestě.' },
 ]);
@@ -126,6 +127,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   customExercises: Object.freeze([]),
   weeklyPlan: Object.freeze([]),
   planChecks: Object.freeze([]),
+  habits: Object.freeze([]),
+  habitChecks: Object.freeze([]),
 });
 
 const typeById = new Map(ACTIVITY_TYPES.map((type) => [type.id, type]));

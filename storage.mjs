@@ -17,6 +17,16 @@ async function request(path,options={}) {
 }
 const api=async(path,options)=> (await request(path,options)).json();
 export const loadAdminOverview=(offset=0)=>api(`admin/overview?offset=${encodeURIComponent(offset)}`);
+export const previewInvitation=code=>api('invitation/preview',{method:'POST',body:JSON.stringify({code})});
+export async function acceptInvitation(code) {
+  if(!user)throw new Error('Nejdříve si vytvoř účet nebo se přihlas.');
+  const owner=user.id;
+  await syncCloud();
+  if(user?.id!==owner)throw new Error('Přihlášení se změnilo. Otevři pozvánku znovu.');
+  const result=await api('invitation/accept',{method:'POST',body:JSON.stringify({code})});
+  await syncCloud();
+  return result;
+}
 export async function initializeAccount() {
   const previous=await local.getValue('active-account');
   try {

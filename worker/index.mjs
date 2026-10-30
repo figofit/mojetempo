@@ -2,7 +2,9 @@ import schema from '../migrations/0001_accounts.sql';
 import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets, librarySettings } from '../domain.mjs';
 import { emptyDiary } from '../sync-rules.mjs';
 import { planningSettings } from '../planning.mjs';
+import { habitSettings } from '../habits.mjs';
 import { accountRole, publicAccount, accountOverview } from './admin.mjs';
+import { invitationFor, publicInvitation, applyInvitation } from './invitations.mjs';
 
 const enc=new TextEncoder();
 const COOKIE='__Host-tempo-session', LOCAL_COOKIE='tempo-local-session';
@@ -75,9 +77,13 @@ async function createSession(db,request,account) {
 function validateState(input) {
   if(!input||input.version!==1||!Array.isArray(input.entries)||input.entries.length>10000||!input.settings)fail(400,'Neplatný formát deníku.');
   const settings={...DEFAULT_SETTINGS},limits={weeklyMinutes:10080,weeklySessions:100,weeklyRecovery:100,dailySteps:200000};
+  if(input.settings.name!==undefined) {
+    if(typeof input.settings.name!=='string'||!input.settings.name.trim()||input.settings.name.trim().length>80)fail(400,'Jméno v deníku může mít 1 až 80 znaků.');
+    settings.name=input.settings.name.trim();
+  }
   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
   for(const [key,max] of Object.entries(limits)){const value=input.settings[key];if(!Number.isInteger(value)||value<1||value>max)fail(400,'Neplatný cíl.');settings[key]=value;}
-  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today));}catch(error){fail(400,error.message);}
+  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today),habitSettings(input.settings,today));}catch(error){fail(400,error.message);}
   if(!Array.isArray(input.settings.modules)||input.settings.modules.some(id=>!MODULES.some(m=>m.id===id)))fail(400,'Neplatné moduly.');
   settings.modules=[...new Set(input.settings.modules)];
   const used=new Set(),entries=input.entries.map(entry=>{
@@ -105,6 +111,12 @@ async function api(request,env) {
   const db=env.DB.withSession?env.DB.withSession('first-primary'):env.DB;
   await initialize(env.DB);
   if(path==='/api/session'&&method==='GET')return json({user:publicAccount(await session(db,request),env)});
+  if(path==='/api/invitation/preview'&&method==='POST') {
+    await rate(db,request,'invitation-preview','',30);
+    const {code}=await body(request);
+    const {invitation,claim}=await invitationFor(code,{db,digest,fail});
+    return json(publicInvitation(invitation,claim,await session(db,request)));
+  }
   if(['/api/register','/api/login','/api/recover'].includes(path)&&method==='POST') {
     const data=await body(request);const {login,password}=credentials(data);
     await rate(db,request,path,login,path==='/api/register'?4:12);
@@ -136,6 +148,13 @@ async function api(request,env) {
   }
   const account=await session(db,request);if(!account)fail(401,'Přihlas se znovu. Neodeslané zápisy zůstávají na tomto zařízení.');
   if(request.headers.get('X-Tempo-Account')!==account.id)fail(409,'Přihlášení se změnilo v jiné kartě. Obnov stránku nebo se znovu přihlas.');
+  if(path==='/api/invitation/accept'&&method==='POST') {
+    if(accountRole(account,env)==='admin')fail(403,'Tuto pozvánku přijmi v osobním účtu pozvaného člověka, nikoliv v účtu správce.');
+    await rate(db,request,'invitation-accept',account.id,12);
+    const {code}=await body(request);
+    const {invitation,claim}=await invitationFor(code,{db,digest,fail});
+    return json(await applyInvitation(db,account,invitation,claim,{validateState,fail}));
+  }
   if(path==='/api/admin/overview'&&method==='GET') {
     if(accountRole(account,env)!=='admin')fail(403,'Přehled je dostupný pouze správci aplikace.');
     const offset=Number(new URL(request.url).searchParams.get('offset')||0);

@@ -7,13 +7,24 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 import {spawnSync} from 'node:child_process';
+import {createHash,createCipheriv,randomBytes} from 'node:crypto';
 import {accountRole} from '../worker/admin.mjs';
 
 // Exercise the actual API handler and actual SQLite queries, including auth,
 // schema initialization, owner selection, and pagination. No Cloudflare calls.
 const directory=await mkdtemp(join(tmpdir(),'tempo-admin-tests-'));
 const bundle=join(directory,'worker.mjs');
-await build({entryPoints:['worker/index.mjs'],outfile:bundle,bundle:true,format:'esm',platform:'neutral',loader:{'.sql':'text'},logLevel:'silent'});
+const invitationCode='A'.repeat(43),expiredCode='B'.repeat(43);
+const encryptedFixture=(code,value)=>{
+  const iv=randomBytes(12),key=createHash('sha256').update('moje-tempo-invitation:'+code).digest(),cipher=createCipheriv('aes-256-gcm',key,iv);
+  const data=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final(),cipher.getAuthTag()]);
+  return {iv:iv.toString('base64'),data:data.toString('base64')};
+};
+const invitationFixture=[
+  {id:'11111111-1111-4111-8111-111111111111',tokenHash:createHash('sha256').update(invitationCode).digest('hex'),expiresAt:'2099-01-01T00:00:00Z',payload:encryptedFixture(invitationCode,{name:'Testovací profil',milestone:{date:'2026-10-08',title:'Zkušební milník',note:'Osobní milník.'}})},
+  {id:'22222222-2222-4222-8222-222222222222',tokenHash:createHash('sha256').update(expiredCode).digest('hex'),expiresAt:'2000-01-01T00:00:00Z',payload:{}},
+];
+await build({entryPoints:['worker/index.mjs'],outfile:bundle,bundle:true,format:'esm',platform:'neutral',loader:{'.sql':'text'},logLevel:'silent',plugins:[{name:'isolated-invitation-fixture',setup(b){b.onLoad({filter:/invitations\.config\.json$/},()=>({contents:JSON.stringify(invitationFixture),loader:'json'}));}}]});
 const worker=(await import(pathToFileURL(bundle))).default;
 await rm(directory,{recursive:true,force:true});
 
@@ -34,6 +45,7 @@ test('trusted admin configuration is excluded from the public app artifact',asyn
     assert.equal(result.status,0,result.stderr);
     const files=await readdir(output,{recursive:true});
     assert.ok(!files.includes('admin.config.json'));
+    assert.ok(!files.includes('invitations.config.json'));
     assert.ok(!files.some(file=>file.startsWith('worker/')));
   }finally{await rm(output,{recursive:true,force:true});}
 });
@@ -194,5 +206,99 @@ test('account writes preserve weekly plans and completion checks with independen
     restored.state.settings.planChecks[0].id='forged-check-id';
     assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:restored})).status,400);
     assert.deepEqual((await f.request('/api/diary',{user:f.owner})).body.state.settings.planChecks,[completed]);
+  }finally{f.sqlite.close();}
+});
+
+test('invitation preview requires an unexpired private code and exposes no claim identity',async()=>{
+  const f=await fixture();
+  try {
+    const preview=await f.request('/api/invitation/preview',{method:'POST',data:{code:invitationCode}});
+    assert.equal(preview.status,200);
+    assert.deepEqual(preview.body.milestone,{date:'2026-10-08',title:'Zkušební milník'});
+    assert.equal(preview.body.available,true);
+    assert.ok(!JSON.stringify(preview.body).includes('tokenHash'));
+    for(const code of ['wrong','C'.repeat(43)])assert.equal((await f.request('/api/invitation/preview',{method:'POST',data:{code}})).status,404);
+    assert.equal((await f.request('/api/invitation/preview',{method:'POST',data:{code:expiredCode}})).status,410);
+  }finally{f.sqlite.close();}
+});
+
+test('invitation is accepted only by an authenticated personal account with matching header',async()=>{
+  const f=await fixture();
+  try {
+    const data={code:invitationCode};f.env.ADMIN_ACCOUNT_ID=f.owner.id;
+    assert.equal((await f.request('/api/invitation/accept',{method:'POST',data})).status,401);
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data,header:false})).status,409);
+    assert.equal((await f.request('/api/invitation/accept',{user:f.owner,method:'POST',data})).status,403);
+    const result=await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data});
+    assert.equal(result.status,200);
+    const diary=(await f.request('/api/diary',{user:f.ordinary})).body.state;
+    assert.equal(diary.entries.length,1);
+    assert.equal(diary.entries[0].type,'moment');assert.equal(diary.entries[0].duration,0);
+    assert.equal(diary.entries[0].date,'2026-10-08');assert.equal(diary.entries[0].title,'Zkušební milník');
+    assert.equal(diary.settings.name,'Testovací profil');assert.equal(diary.onboardingComplete,true);
+    assert.equal((await f.request('/api/session',{user:f.ordinary})).body.user.role,'user');
+    assert.equal((await f.request('/api/invitation/accept',{user:f.owner,method:'POST',data})).status,403);
+  }finally{f.sqlite.close();}
+});
+
+test('an invitation belongs to one account and repeated use never duplicates or resurrects its moment',async()=>{
+  const f=await fixture();
+  try {
+    const data={code:invitationCode};
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data})).status,200);
+    assert.equal((await f.request('/api/invitation/accept',{user:f.owner,method:'POST',data})).status,409);
+    const preview=(await f.request('/api/invitation/preview',{user:f.owner,method:'POST',data})).body;
+    assert.equal(preview.available,false);assert.equal(preview.alreadyApplied,false);
+    assert.ok(!JSON.stringify(preview).includes(f.ordinary.id));
+    const ownPreview=(await f.request('/api/invitation/preview',{user:f.ordinary,method:'POST',data})).body;
+    assert.equal(ownPreview.alreadyApplied,true);
+    const remote=(await f.request('/api/diary',{user:f.ordinary})).body;
+    remote.state.entries=[];
+    assert.equal((await f.request('/api/diary',{user:f.ordinary,method:'PUT',data:remote})).status,200);
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data})).body.alreadyApplied,true);
+    assert.equal((await f.request('/api/diary',{user:f.ordinary})).body.state.entries.length,0);
+  }finally{f.sqlite.close();}
+});
+
+test('invitation appends its moment and preserves existing entries goals name and habits',async()=>{
+  const f=await fixture();
+  try {
+    const remote=(await f.request('/api/diary',{user:f.ordinary})).body;
+    remote.state.settings={...remote.state.settings,name:'Moje vlastní jméno',dailySteps:5000,habits:['vitamins']};
+    remote.state.entries=[{id:'my-existing-entry',type:'walking',date:'2026-10-08',duration:30,steps:1000,note:'Keep me',createdAt:'2026-10-08T12:00:00Z'}];
+    assert.equal((await f.request('/api/diary',{user:f.ordinary,method:'PUT',data:remote})).status,200);
+    const before=(await f.request('/api/diary',{user:f.ordinary})).body.state;
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data:{code:invitationCode}})).status,200);
+    const after=(await f.request('/api/diary',{user:f.ordinary})).body.state;
+    assert.deepEqual(after.entries[0],before.entries[0]);assert.equal(after.entries.length,2);
+    assert.equal(after.settings.name,before.settings.name);assert.equal(after.settings.dailySteps,5000);assert.deepEqual(after.settings.habits,['vitamins']);
+  }finally{f.sqlite.close();}
+});
+
+test('racing personal accounts cannot both claim a single invitation',async()=>{
+  const f=await fixture();
+  try {
+    const responses=await Promise.all([f.owner,f.ordinary].map(user=>f.request('/api/invitation/accept',{user,method:'POST',data:{code:invitationCode}})));
+    assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
+    const diaries=await Promise.all([f.owner,f.ordinary].map(user=>f.request('/api/diary',{user})));
+    assert.equal(diaries.reduce((total,r)=>total+r.body.state.entries.length,0),1);
+  }finally{f.sqlite.close();}
+});
+
+test('an invitation reserved during a concurrent diary change can be safely retried',async()=>{
+  const f=await fixture();
+  try {
+    const original=f.db.batch;let injected=false;
+    f.db.batch=async statements=>{
+      if(!injected){injected=true;f.sqlite.prepare('UPDATE diaries SET revision=revision+1 WHERE account_id=?').run(f.ordinary.id);}
+      return original(statements);
+    };
+    const data={code:invitationCode};
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data})).status,409);
+    const preview=(await f.request('/api/invitation/preview',{user:f.ordinary,method:'POST',data})).body;
+    assert.equal(preview.available,true);assert.equal(preview.alreadyApplied,false);
+    assert.equal((await f.request('/api/invitation/accept',{user:f.ordinary,method:'POST',data})).status,200);
+    const diary=(await f.request('/api/diary',{user:f.ordinary})).body.state;
+    assert.equal(diary.entries.length,1);
   }finally{f.sqlite.close();}
 });

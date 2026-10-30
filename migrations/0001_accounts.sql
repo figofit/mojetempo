@@ -21,3 +21,8 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE TABLE IF NOT EXISTS rate_limits (
   key TEXT PRIMARY KEY, window INTEGER NOT NULL, attempts INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS invitation_claims (
+  invitation_id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  claimed_at INTEGER NOT NULL, applied_at INTEGER
+);

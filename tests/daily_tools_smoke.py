@@ -137,17 +137,40 @@ with tempfile.TemporaryDirectory(prefix='tempo-daily-tools-') as temporary:
             check('planned activity opens its matching type date and personal label', page.locator('#entry-type').input_value() == 'cardio' and page.locator('#entry-date').input_value() == today and page.locator('#entry-form [name="title"]').input_value() == 'Můj bazén')
             close_entry()
 
+            # Mobility has a separate label within the recovery module.
+            route('overview')
+            page.locator('.today-actions [data-type="mobility"]').click()
+            check('mobility quick log selects its own recovery type',page.locator('#entry-type').input_value()=='mobility' and not page.locator('#strength-fields').is_visible())
+            close_entry()
+
+            # Small optional habits stay collapsed and never create fake exercise.
+            page.evaluate("location.hash='modules'")
+            page.locator('.habit-settings').wait_for(state='visible')
+            page.locator('[data-habit="vitamins"]').check(force=True)
+            wait_setting(None, 'd.settings.habits.includes("vitamins")')
+            page.locator('[data-habit="protein"]').check(force=True)
+            wait_setting(None, 'd.settings.habits.includes("protein")')
+            count_before_habits=len(diary()['entries'])
+            route('overview')
+            check('optional habits appear as a collapsed small section', not page.locator('.today-habits').evaluate('(el)=>el.open'))
+            page.locator('.today-habits summary').click()
+            page.locator('[data-action="toggle-habit"][data-habit-id="vitamins"]').click()
+            page.wait_for_function('document.querySelector("[data-habit-id=vitamins]")?.getAttribute("aria-pressed")==="true"')
+            check('checking vitamins preserves the open section and creates no activity', page.locator('.today-habits').evaluate('(el)=>el.open') and len(diary()['entries'])==count_before_habits and diary()['settings']['habitChecks'][0]['habitId']=='vitamins')
+
             # Goals and other setting collections must not overwrite one another.
             before = diary()['settings']
             route('settings')
             page.locator('#settings-form [name="weeklyMinutes"]').fill('180')
+            page.locator('#settings-form [name="name"]').fill('Já <IT FIT>')
             page.locator('#settings-form [type="submit"]').click()
             wait_setting(None, 'd.settings.weeklyMinutes===180')
             after = diary()['settings']
-            preserved = all(after[key] == before[key] for key in ['favoriteExercises', 'customExercises', 'weeklyPlan', 'planChecks'])
+            preserved = all(after[key] == before[key] for key in ['favoriteExercises', 'customExercises', 'weeklyPlan', 'planChecks','habits','habitChecks'])
             check('saving goals preserves exercise library plan and checks', preserved)
+            check('personal journal name is saved and safely displayed',after['name']=='Já <IT FIT>' and page.locator('.sidebar-profile strong').inner_text()=='Já <IT FIT>' and page.locator('.sidebar-profile strong IT').count()==0)
             page.reload(wait_until='networkidle')
-            check('all new settings survive a full application reload', all(diary()['settings'][key] == after[key] for key in ['favoriteExercises', 'customExercises', 'weeklyPlan', 'planChecks']))
+            check('all new settings survive a full application reload', all(diary()['settings'][key] == after[key] for key in ['favoriteExercises', 'customExercises', 'weeklyPlan', 'planChecks','habits','habitChecks']))
 
             # The same flows fit a normal mobile viewport without horizontal scroll.
             page.set_viewport_size({'width': 390, 'height': 844})

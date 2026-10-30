@@ -117,7 +117,7 @@ with sync_playwright() as p:
         wait_entries(2)
         check('recovery saved separately', sorted(e['type'] for e in state()['entries']) == ['sauna', 'walking'])
         cards = {item.locator('.stat-label').inner_text(): item.locator('.stat-value').inner_text().replace('\n', '') for item in page.locator('.stat-card').all()}
-        check('movement and recovery stats separated', cards.get('Minuty pohybu') == '45min' and cards.get('Pohybové aktivity') == '1' and cards.get('Čas na regeneraci') == '1×' and cards.get('Dnešní kroky') == '5\xa0000', cards)
+        check('movement and recovery stats separated', cards.get('Minuty pohybu') == '45min' and cards.get('Pohybové aktivity') == '1' and cards.get('Regenerační aktivity') == '1×' and cards.get('Dnešní kroky') == '5\xa0000', cards)
         check('weekly graph contains separate categories', page.locator('[title="Pohyb: 45 min"]').count() == 1 and page.locator('[title="Regenerace: 20 min"]').count() == 1)
 
         route('chronicle')
@@ -241,7 +241,7 @@ with sync_playwright() as p:
         wait_entries(5)
         check('photo-only chronicle moment accepted', state()['entries'][-1]['type'] == 'moment' and bool(state()['entries'][-1].get('photoId')) and not state()['entries'][-1]['title'] and not state()['entries'][-1]['note'])
         cards = {item.locator('.stat-label').inner_text(): item.locator('.stat-value').inner_text().replace('\n', '') for item in page.locator('.stat-card').all()}
-        check('steps and moments receive no workout credit', cards.get('Minuty pohybu') == '45min' and cards.get('Pohybové aktivity') == '1' and cards.get('Čas na regeneraci') == '1×' and cards.get('Dnešní kroky') == '8\xa0000', cards)
+        check('steps and moments receive no workout credit', cards.get('Minuty pohybu') == '45min' and cards.get('Pohybové aktivity') == '1' and cards.get('Regenerační aktivity') == '1×' and cards.get('Dnešní kroky') == '8\xa0000', cards)
         route('modules')
         for category in ('movement', 'recovery'):
             page.locator(f'[data-module="{category}"]').locator('..').click()
