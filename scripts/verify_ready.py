@@ -1,10 +1,32 @@
 """Verify the deployed shell in a real browser; surface a concise public CI error."""
 import os
 import shutil
+import socket
+import subprocess
 import time
+from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 
 base=os.environ['TEMPO_BASE_URL']
+hostname=urlsplit(base).hostname
+
+def dns_diagnostic():
+    # Query only the public application hostname. A CNAME lookup also avoids
+    # mistaking a cached old A record for the registrar's current CNAME answer.
+    records=[]
+    if shutil.which('nslookup'):
+        try:
+            lookup=subprocess.run(['nslookup','-type=CNAME',hostname],capture_output=True,text=True,timeout=10)
+            records.extend(line.strip() for line in lookup.stdout.splitlines() if 'canonical name =' in line)
+        except (OSError,subprocess.TimeoutExpired):pass
+    try:
+        canonical,aliases,addresses=socket.gethostbyname_ex(hostname)
+        records.append(f'canonical={canonical}; IPv4={",".join(addresses)}')
+    except OSError as error:records.append(f'DNS resolution failed: {error}')
+    text=(f'{hostname}: '+ '; '.join(records)).replace('%','%25').replace('\r','%0D').replace('\n','%0A')[:900]
+    print(f'::notice title=Public DNS::{text}',flush=True)
+
+dns_diagnostic()
 deadline=time.monotonic()+max(1,int(os.environ.get('TEMPO_READY_TIMEOUT_SECONDS','60')))
 with sync_playwright() as p:
     executable=os.environ.get('TEMPO_CHROMIUM') or shutil.which('chromium')
@@ -31,6 +53,7 @@ with sync_playwright() as p:
                 reason=str(error).splitlines()[0].replace('%','%25').replace('\r','%0D').replace('\n','%0A')[:400]
                 print(f'Deployment attempt {attempt}: {reason}',flush=True)
                 if time.monotonic()>=deadline:
+                    dns_diagnostic()
                     print(f'::error title=Cloudflare application unavailable::{reason}',flush=True)
                     raise SystemExit(1)
                 time.sleep(min(5,max(0,deadline-time.monotonic())))
