@@ -42,3 +42,11 @@ Převod se nesmí omezit na názvy tréninků: musí uchovat i opakování, zát
 5. Zkontrolovat skutečný zápis i úpravu z obou adres, vlastní pole, návyky, moduly, fotografie, offline změny a jejich sloučení.
 
 Připravená soukromá pozvánka je jeden způsob založení Oldova účtu. Pokud už účet přijal, musí se použít jeho existující ID. Nezakládá se druhý účet a nic se nepřipisuje správci jen podle názvu subdomény.
+
+## Dokončení v místním vlákně s dostupnými zdroji
+
+Místní vlákno **Vytvořit Oldovi fitness kroniku** má pracovní adresář `C:\Users\Admin\Documents\ChatGPT\IT FIT`; původní zdroje jsou v podsložce `olda`. Historie v něm dokládá funkční nasazování přes místní Cloudflare CLI. To není oprávnění přenesené do tohoto cloudového prostředí.
+
+Předání pro pokračování v tomto místním vlákně:
+
+> Proveď sjednocení Oldovy aplikace a Moje IT FIT do jediné databáze `mojetempo-db` a jednoho Oldova účtu. Společný kód je v `figofit/mojetempo`, aktuální `main`; obsahuje `appearance.mjs`, `olda.css` a test skutečné synchronizace mezi dvěma adresami. Načti aktuální místní Oldovy soubory a skutečná data z jeho stávající D1. Zachovej úplný původní export mimo veřejný repozitář. Přenes všechna pole včetně vlastních návyků, opakování, zátěže, společných tréninků, plánu a energie; pokud pro ně společný model nemá pole, doplň je do stejného modelu, validace, formulářů, záloh a synchronizace pro obě podoby. Starý JSON neimportuj přímo běžnou obnovou. Zjisti skutečné ID Oldova existujícího účtu nebo využij již připravenou osobní pozvánku; nepřiřazuj jeho data účtu správce. U projektu Pages `olda-itfit` zachovej adresu `olda.itfit.cz`, původní přání a osobní zelený motiv 40. Zápisy z obou adres mají používat jediný účet a stejnou D1, nikoli kopírování mezi dvěma databázemi. Zachovej bezpečné přihlášení a osobní data nevystavuj veřejně jen kvůli narozeninovému vzhledu. Využij existující místní Cloudflare přihlášení bez čtení nebo posílání tokenů. Ověř skutečný zápis oběma směry, úplnost převodu a mobilní podobu; potom změny nasadíš a ověříš obě veřejné adresy. Dokončení je autorizované uživatelem, další obecné potvrzení návrhu není potřeba.
