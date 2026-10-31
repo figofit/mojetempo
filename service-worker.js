@@ -8,6 +8,8 @@ const INDEX_URL = new URL('index.html', BASE_URL);
 const SHELL_PATHS = [
   'index.html',
   'styles.css',
+  'olda.css',
+  'appearance.mjs',
   'app.js',
   'domain.mjs',
   'storage.mjs',

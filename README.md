@@ -9,6 +9,7 @@ První verze slouží k ověření každodenního používání. Navazuje na zá
 ## Co aplikace nabízí
 
 - Volitelné osobní fajfky: denní mobilita, vitamíny / doplňky a vlastní cíl bílkovin. Zapnutí v Mých modulech, malá rozbalovací část Dnes; historie se synchronizuje i zálohuje. Výchozí stav je vypnutý.
+- Připravený náhled Oldova narozeninového vzhledu přes `/?vzhled=olda`. Používá stejný otevřený účet a formuláře; produkční Oldova adresa zatím zůstává samostatná, viz [stav propojení](docs/olda-integration.md).
 - [Osobní pozvánky](docs/invitations.md) s vlastním účtem a připraveným prvním milníkem do kroniky.
 
 - Přehled **Dnes** s rychlým zápisem pohybu a doplněním včerejších kroků.

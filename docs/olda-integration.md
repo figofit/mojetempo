@@ -14,7 +14,24 @@ Současné přihlášení používá bezpečnou cookie platnou pro jednu adresu.
 
 `tests/cloud_smoke.py` obsahuje kontrolu dvou různých lokálních hostitelů nad skutečným Workerem nebo Pages a jedinou izolovanou D1. Ověřuje shodné ID účtu, přenos nastavení oběma směry, změnu původního záznamu bez duplikace, obnovení stránky a zrušení přihlášení po obnově hesla. Nepřipojuje se k produkčnímu Oldovu účtu.
 
-Připojení produkční adresy `olda.itfit.cz`, původní design a původní narozeninové přání zatím nebyly změněny. K dokončení je potřeba aktuální Oldův zdrojový kód, text přání a ověření původního formátu uložených dat. Dochované části stylů z konverzace nejsou úplný zdrojový kód aplikace ani potvrzení aktuálního webu.
+Připojení produkční adresy `olda.itfit.cz` zatím nebylo změněno. Připnuté vlákno **Vytvořit Oldovi fitness kroniku** (místní vlákno `01a136b0-fad5-71f1-8a28-fee00bd40e97`) potvrdilo vlastní projekt Pages `olda-itfit` a vlastní databázi. DNS u WEDOS míří na `olda-itfit.pages.dev`; jeho cílový projekt proto nelze považovat za již propojený s Moje IT FIT.
+
+V `appearance.mjs` a `olda.css` je připravená osobní podoba společné aplikace. Přesný text původního přání a podpis pocházejí z výpisu `olda/src/data.json` v původním vlákně. Náhled `/?vzhled=olda` používá stejný právě otevřený deník, přihlášení a formuláře jako standardní zobrazení; viditelný pruh na to upozorňuje. Vzhled sám žádný účet nevybírá ani nesdílí jeho data. Po nasazení stejné aplikace na osobní adresu se vzhled vybere podle přesného hostitele `olda.itfit.cz`.
+
+Čtení konverzace není přístup k souborům ve Windows ani přenos oprávnění Cloudflare z místního počítače. K dokončení je potřeba načíst aktuální nasazené soubory nebo celou složku `C:\Users\Admin\Documents\ChatGPT\IT FIT\olda` a získat aktuální stav původní databáze. Původní server dovoloval veřejné prohlížení a zápis chránil samostatným heslem. Připojení k účtu Moje IT FIT musí zachovat přístupová pravidla soukromého deníku; samotné zobrazení narozeninového přání neuděluje přístup k zápisům.
+
+### Zjištěný původní datový formát
+
+Z výpisu `olda/src/core.js` je znám formát `schemaVersion: 1`, `clientId: olda-4-0`:
+
+- `profile`: jméno, oslovení, narozeniny, věk, začátek evidence, věnování, podpis, odkaz na Vault.
+- `plan`: název, zaměření, poznámky a položky cvik / domluvené provedení / poznámka.
+- `habits`: vlastní definice s názvem, poznámkou, týdenním cílem a archivací.
+- `sessions`: kategorie, datum, název, minuty (včetně neznámého času 0), společný trénink, poznámka a cviky se sériemi, opakováními a zátěží.
+- `days`: odškrtnuté návyky, kroky, energie a poznámka pro datum.
+- `milestones`: datum, název a poznámka.
+
+Převod se nesmí omezit na názvy tréninků: musí uchovat i opakování, zátěž, příznak společného tréninku, vlastní definice návyků, plán a denní energii. Současný model Moje IT FIT má u silových cviků série a pohybové vzory; přímé předání starého JSON do běžné obnovy by původní pole nepřevzalo. Před propojením je proto nutný převod s náhledem a uchováním úplného původního exportu. Prázdný export z původní přípravy dárku nedokazuje, že dnešní databáze stále neobsahuje zápisy.
 
 ## Navazující implementace
 

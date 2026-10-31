@@ -22,6 +22,8 @@ SOURCE_ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_FILES = (
     "index.html",
     "styles.css",
+    "olda.css",
+    "appearance.mjs",
     "app.js",
     "domain.mjs",
     "storage.mjs",

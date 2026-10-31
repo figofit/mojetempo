@@ -1,3 +1,4 @@
+import {siteAppearance,applyAppearance,renderOldaWelcome,renderOldaGift} from './appearance.mjs';
 import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, workoutLabel, localDate, validateEntry, computeStats, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
 import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
 import {MOBILITY_EXERCISES,mobilityExerciseNames} from './mobility-catalog.mjs';
@@ -8,6 +9,9 @@ import { planningSettings, renderTodayPlan, renderWeeklyPlan, renderPlanEditor, 
 import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
+
+const appearance=siteAppearance(location.href);
+applyAppearance(appearance,document);
 
 const paths = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -170,9 +174,9 @@ function renderOverview(stats) {
   const insights=generateInsights(visibleEntries(),state.settings);
   const recent=stats.recentEntries.slice(0,4);
   const goal=moduleOn('movement')?{title:'TÝDENNÍ CÍL POHYBU',percent:stats.weekGoalPercent,value:stats.weekMinutes,target:state.settings.weeklyMinutes,unit:'minut'}:moduleOn('recovery')?{title:'TÝDENNÍ CÍL REGENERACE',percent:stats.weekRecovery/state.settings.weeklyRecovery*100,value:stats.weekRecovery,target:state.settings.weeklyRecovery,unit:'aktivit'}:moduleOn('steps')?{title:'DNEŠNÍ CÍL KROKŮ',percent:stats.todaySteps/state.settings.dailySteps*100,value:stats.todaySteps,target:state.settings.dailySteps,unit:'kroků'}:null;
-  return `${heading('Každý pohyb se počítá.', 'Přehled tvého úsilí. Vlastním tempem, den za dnem.')}${renderToday()}
+  return `${appearance.id==='olda'?renderOldaWelcome():heading('Každý pohyb se počítá.', 'Přehled tvého úsilí. Vlastním tempem, den za dnem.')}${renderToday()}
     <div class="hero-grid"><section class="hero-card"><div class="hero-copy"><span class="hero-kicker">TVOJE CESTA, TVOJE PRAVIDLA</span><h2>Dobře se hýbat.<br>Dobře se cítit.</h2><p>Trénink, kolo i zasloužený odpočinek.<br>Malé momenty, které tvoří velký příběh.</p><button class="button hero-button" data-action="add">Přidat dnešní moment ${icon('arrow')}</button></div><div class="hero-visual" aria-hidden="true"><svg viewBox="0 0 260 230" fill="none"><circle cx="150" cy="108" r="92" stroke="#ffffff" stroke-opacity=".12"/><circle cx="150" cy="108" r="67" stroke="#ffffff" stroke-opacity=".12"/><path d="M32 180C55 100 96 193 119 110S173 153 209 52" stroke="#c5edb3" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="180" r="8" fill="#c5edb3"/><circle cx="119" cy="110" r="8" fill="#c5edb3"/><circle cx="209" cy="52" r="11" fill="#c5edb3"/><circle cx="209" cy="52" r="21" stroke="#c5edb3" stroke-opacity=".4"/><path d="m180 181 7 7 14-15" stroke="#c5edb3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="166" y="159" width="50" height="43" rx="14" stroke="#ffffff" stroke-opacity=".2"/></svg><span class="hero-badge">${icon('sparkles')} Malé kroky. Skutečný posun.</span></div></section>
-    <section class="goal-card"><div>${goalCardContent(goal)}</div></section></div>
+    <section class="goal-card"><div>${goalCardContent(goal)}</div></section>${appearance.id==='olda'?renderOldaGift():''}</div>
     <div class="stat-grid">${moduleOn('movement')?statCard('clock','Minuty pohybu',number(stats.weekMinutes),'min',`Tento týden · cíl ${number(state.settings.weeklyMinutes)} min`)+statCard('dumbbell','Pohybové aktivity',number(count),'',`${stats.daysActive} aktivních dní · cíl ${state.settings.weeklySessions} aktivit`):''}${moduleOn('recovery')?statCard('moon','Regenerační aktivity',number(stats.weekRecovery),'×',`Tento týden · cíl ${state.settings.weeklyRecovery} aktivity`,'#ae835d'):''}${moduleOn('steps')?statCard('footprints','Dnešní kroky',number(stats.todaySteps),'',`Zapsané aktivity · cíl ${number(state.settings.dailySteps)}`,'#6388b6'):''}</div>
     <div class="dashboard-grid"><section class="panel">${weekChart(stats)}</section><section class="panel compact-calendar">${monthCalendar(stats)}</section></div>
     <div class="dashboard-grid"><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Poslední aktivity</h2><p class="panel-subtitle">Malé zápisy, které se neztratí.</p></div><button class="button ghost small" data-view="diary">Celý deník ${icon('arrow')}</button></div><div class="activity-list">${recent.length?recent.map(entry=>activityRow(entry)).join(''):empty()}</div></section><section class="panel"><div class="panel-header"><div><h2 class="panel-title">Chvilka pro bilanci</h2><p class="panel-subtitle">Postřehy z tvých záznamů.</p></div>${icon('sparkles')}</div><div class="insights-list">${insights.slice(0,3).map((insight,index)=>`<article class="insight-card"><span class="insight-icon">${icon(['target','moon','heart'][index])}</span><p>${esc(insight)}</p></article>`).join('')}</div><small class="form-hint">Pravidla podle záznamů. Bez hodnocení zdraví nebo AI rozboru.</small></section></div>`;
@@ -266,7 +270,7 @@ function render() {
   $('#view-content').innerHTML=renderers[currentView]();
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
-  document.title=`${views[currentView]} · Moje tempo`;
+  document.title=`${views[currentView]} · ${appearance.title}`;
   hydratePhotos(revision);
 }
 

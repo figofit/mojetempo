@@ -1,0 +1,44 @@
+/* Palette, birthday motif and wording retained from Olda 4.0. */
+:root[data-appearance="olda"]{color-scheme:dark;color:#f0f2e7;background:#11140f;--ink:#f0f2e7;--muted:#a0aa96;--green:#d7f878;--green-dark:#222b1b;--lime:#d7f878;--line:#2d3427;--canvas:#11140f;--white:#191f15;font-family:"Segoe UI",Arial,sans-serif}
+[data-appearance="olda"] :is(.sidebar,.panel,.stat-card,.module-card,.dialog,.calendar-arrow,.icon-button,.button.secondary,.filter-chip,.settings-card){background:#191f15;border-color:#35402c;color:var(--ink)}
+[data-appearance="olda"] :is(.sidebar,.panel,.module-card,.dialog,.button.secondary,.filter-chip){border-color:var(--line)}
+[data-appearance="olda"] :is(.brand-mark,.button.primary,.nav-item.active,.filter-chip.active){background:#d7f878;border-color:#d7f878;color:#202a0f}
+[data-appearance="olda"] .brand-mark{font-size:16px;font-weight:800}
+[data-appearance="olda"] .brand b{color:#d7f878}
+[data-appearance="olda"] :is(.brand-subtitle,.nav-item,.breadcrumb,.privacy-label,.activity-subtitle,.activity-duration small,.tag,.panel-subtitle,.form-hint,.stat-label,.stat-description,.sidebar-profile small,.calendar-label){color:#a0aa96}
+[data-appearance="olda"] :is(.button.primary:hover,.nav-item.active:hover){background:#e2fd81;color:#202a0f}
+[data-appearance="olda"] :is(input,select,textarea){color:#e5efda;background:#121a0e;border-color:#445232}
+[data-appearance="olda"] :is(.tag,.sidebar-note,.stat-icon,.insight-card,.goal-card,.exercise-library,.plan-day,.exercise-choice,.workout-details,.strength-ratio,.strength-pattern,.today-habits,.plan-mobility,.rhythm-preview-days>div){background:#222b1b;border-color:#3a452d}
+[data-appearance="olda"] :is(.button.ghost,.text-link,.calendar-arrow,.eyebrow,.nav-count){color:#d7f878}
+[data-appearance="olda"] :is(.plan-check,.exercise-chip,.exercise-star,.exercise-filter,.account-status){background:#26331b;border-color:#465434;color:#d7f878}
+[data-appearance="olda"] :is(.plan-check[aria-pressed="true"],.plan-mobility.is-complete,.habit-check.is-complete){color:#202a0f;background:#d7f878}
+[data-appearance="olda"] :is(.hero-grid>.hero-card,.hero-grid>.goal-card){background:#222b1b;border:1px solid #3a452d}
+[data-appearance="olda"] .hero-grid>.hero-card{display:none}
+[data-appearance="olda"] .hero-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+[data-appearance="olda"] .goal-card{min-height:250px}
+[data-appearance="olda"] .goal-card .ring-large:before{background:#222b1b}
+[data-appearance="olda"] .month-ring::before,[data-appearance="olda"] .hero-ring::before,[data-appearance="olda"] .progress-ring::before{background:#191f15}
+[data-appearance="olda"] .hero-ring strong,[data-appearance="olda"] .progress-ring strong{color:#f0f2e7}
+[data-appearance="olda"] .month-ring{background:conic-gradient(var(--ring-color) var(--progress),#33402a 0)}
+[data-appearance="olda"] .month-date{color:#cadab0}
+[data-appearance="olda"] .month-day.active .month-date{color:#d7f878}
+[data-appearance="olda"] :is(.today-record,.habit-check,.mobility-choices label,.journey-counts>div,.exercise-row,.empty-state){background:#222b1b;border-color:#3a452d;color:#f0f2e7}
+[data-appearance="olda"] .today-record span{color:#f0f2e7}
+[data-appearance="olda"] :is(.today-record small,.habit-check small,.journey-counts span){color:#a0aa96}
+[data-appearance="olda"] .journey-counts strong{color:#d7f878}
+[data-appearance="olda"] .stat-card:nth-child(n) .stat-icon{background:#26331b;color:#d7f878}
+[data-appearance="olda"] .activity-icon{background:#26331b}
+[data-appearance="olda"] :is(.month-day.today,.month-day.active){color:#d7f878}
+[data-appearance="olda"] .demo-banner{background:#303d20;border-color:#79874c;color:#f0f2e7}
+[data-appearance="olda"] :is(.plan-day.is-today,.calendar-day.today){background:#26331b;border-color:#d7f878}
+[data-appearance="olda"] .bar-chart{background:none}
+[data-appearance="olda"] :is(.page-heading h1,.panel-title,.activity-title,.stat-value,.habit-label,.exercise-choice strong,.plan-item strong){color:#f0f2e7}
+[data-appearance="olda"] :is(.dialog-header,.dialog-actions,.sidebar-profile){border-color:#35402c}
+[data-appearance="olda"] .dialog::backdrop{background:#060904c9}
+.olda-welcome{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:20px;background:#222b1b;border:1px solid #3a452d;border-radius:24px;padding:34px 36px;margin-bottom:24px;overflow:hidden}
+.olda-welcome h1{font-size:clamp(36px,4.4vw,58px);line-height:1.08;letter-spacing:-1.8px;margin:12px 0 18px}.olda-welcome h1 span{color:#d7f878}.olda-welcome p:not(.eyebrow){color:#b9c4a9;line-height:1.6}.olda-welcome small{display:block;color:#cadab0;margin-top:23px}
+.olda-forty{align-self:center;justify-self:center;font-weight:800;font-size:147px;line-height:1;letter-spacing:-13px;color:#d7f878;padding-right:13px}.olda-forty span{display:block;text-align:center;letter-spacing:3px;font-weight:500;font-size:10px;color:#cadab0;margin-top:11px}
+.olda-gift{background:#d7f878;color:#243112;border-radius:22px;padding:30px;display:flex;flex-direction:column;justify-content:center;min-width:0}.olda-gift .eyebrow{color:#4b6228}.olda-gift h2{font-size:28px;letter-spacing:-.7px;line-height:1.25;margin:13px 0}.olda-gift>p:not(.eyebrow){font-size:14px;line-height:1.7;color:#3c501f}.olda-gift>div{display:flex;justify-content:space-between;border-top:1px solid #aec958;padding-top:17px;margin-top:20px;font-weight:650}.olda-gift>div span{font-size:24px}
+.appearance-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:#cadab0;background:#26331b;border:1px solid #465434;border-radius:12px;padding:12px 16px;margin-bottom:20px}.appearance-preview a{color:#d7f878;text-decoration:underline;white-space:nowrap}
+@media(max-width:800px){.olda-welcome{grid-template-columns:minmax(0,1fr) 125px;padding:25px;gap:12px}.olda-forty{font-size:100px;letter-spacing:-8px}.olda-welcome h1{font-size:38px}.olda-gift{padding:24px}.appearance-preview{align-items:flex-start;flex-direction:column}}
+@media(max-width:500px){[data-appearance="olda"] .hero-grid{grid-template-columns:minmax(0,1fr)}.olda-welcome{grid-template-columns:minmax(0,1fr);padding:24px}.olda-forty{font-size:85px;justify-self:end;margin-top:-50px}.olda-welcome small{max-width:170px}.olda-welcome h1{font-size:40px}.olda-gift h2{font-size:25px}}
