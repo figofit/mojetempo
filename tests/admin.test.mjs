@@ -41,7 +41,7 @@ test('trusted deployment fallback selects only its exact account and explicit en
 test('trusted admin configuration is excluded from the public app artifact',async()=>{
   const output=await mkdtemp(join(tmpdir(),'tempo-admin-public-test-'));
   try {
-    const result=spawnSync('python3',['scripts/build_site.py','--output-dir',output],{encoding:'utf8'});
+    const result=spawnSync(process.env.PYTHON||'python3',['scripts/build_site.py','--output-dir',output],{encoding:'utf8'});
     assert.equal(result.status,0,result.stderr);
     const files=await readdir(output,{recursive:true});
     assert.ok(!files.includes('admin.config.json'));

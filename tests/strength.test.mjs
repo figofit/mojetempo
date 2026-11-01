@@ -15,7 +15,7 @@ test('a workout records patterns alone or named exercises and strips unknown pro
   assert.ok(!validateEntry(log({type:'walking',workout:workout([exercise('core')])})).valid);
 });
 test('malformed exercise volume and split names cannot enter local or cloud diaries',()=>{
-  for(const exercises of [[null],[exercise('unknown')],[exercise('squat',0)],[exercise('squat',-1)],[exercise('hinge',1.5)],[exercise('hinge',51)],[exercise('core','3')],Array.from({length:51},()=>exercise('core')),[exercise('squat',3,'x'.repeat(101))]])assert.ok(!validateEntry(log({workout:workout(exercises)})).valid);
+  for(const exercises of [[null],[exercise('unknown')],[exercise('squat',0)],[exercise('squat',-1)],[exercise('hinge',1.5)],[exercise('hinge',101)],[exercise('core','3')],Array.from({length:81},()=>exercise('core')),[exercise('squat',3,'x'.repeat(121))]])assert.ok(!validateEntry(log({workout:workout(exercises)})).valid);
   assert.ok(!validateEntry(log({workout:workout([],'custom')})).valid);
   assert.ok(!validateEntry(log({workout:workout([],'custom','x'.repeat(81))})).valid);
   assert.ok(validateEntry(log({workout:workout([],'custom','Záda + biceps')})).valid);

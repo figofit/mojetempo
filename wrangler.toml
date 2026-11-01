@@ -7,11 +7,11 @@ workers_dev = true
 [build]
 command = "node scripts/cloudflare_build.mjs"
 
-# Wrangler provisions a dedicated database on the first authorized deployment.
-# Existing provisioned binding IDs are reused on subsequent deployments.
+# The two personal app addresses and the existing Worker use this same D1.
 [[d1_databases]]
 binding = "DB"
 database_name = "mojetempo-db"
+database_id = "173fef7f-f0f8-430e-a3f4-47144d81038f"
 
 [[rules]]
 type = "Text"

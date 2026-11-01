@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 dist/
+olda-dist/
 .wrangler/
 node_modules/
 .dev.vars

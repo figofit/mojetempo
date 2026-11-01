@@ -2,11 +2,13 @@
  * Pages supports an external DNS CNAME; a Workers Custom Domain requires a Cloudflare zone.
  * Local builds and GitHub test jobs only package files and never contact the account API.
  */
-import {writeFile,rm} from 'node:fs/promises';
+import {writeFile,rm,mkdtemp} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {buildPublic,preparePages,ROOT} from './build_pages.mjs';
+import {buildOlda} from './build_olda.mjs';
 
 export const PROJECT='figofit-mojetempo';
 export const DOMAIN='moje.itfit.cz';
@@ -78,6 +80,27 @@ export async function attachDomain(api) {
   if(domains.some(domain=>domain.name===DOMAIN))return;
   await api(`/pages/projects/${PROJECT}/domains`,'POST',{name:DOMAIN});
 }
+export async function ensureOldaBinding(api,database) {
+  const project=await api('/pages/projects/olda-itfit');
+  if(project.name!=='olda-itfit'||project.subdomain!=='olda-itfit.pages.dev')throw new Error('Původní Oldův projekt nebyl ověřen.');
+  const linked=await api(`/d1/database/${database.uuid}/query`,'POST',{sql:"SELECT id FROM diary_links WHERE id='olda'"});
+  if(!linked[0]?.results?.length)throw new Error('Nejdřív převeď původní data a přiřaď skutečný Oldův účet.');
+  if(project.deployment_configs?.production?.d1_databases?.DB?.id!==database.uuid||project.deployment_configs?.preview?.d1_databases?.DB?.id!==database.uuid)await api('/pages/projects/olda-itfit','PATCH',{deployment_configs:{production:{d1_databases:{DB:{id:database.uuid}}},preview:{d1_databases:{DB:{id:database.uuid}}}}});
+}
+export async function deployOriginalOlda({api,database,accountId,token}) {
+  await ensureOldaBinding(api,database);
+  const directory=await mkdtemp(join(tmpdir(),'olda-original-pages-')),publicDir=join(directory,'public');
+  try {
+    await buildOlda({output:publicDir});
+    await writeFile(join(directory,'wrangler.toml'),`name = "olda-itfit"\npages_build_output_dir = "./public"\ncompatibility_date = "2026-10-29"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${DATABASE}"\ndatabase_id = "${database.uuid}"\n`);
+    const environment={...process.env,CLOUDFLARE_ACCOUNT_ID:accountId,CLOUDFLARE_API_TOKEN:token,WRANGLER_SEND_METRICS:'false'};
+    const result=spawnSync(process.execPath,[join(ROOT,'node_modules/wrangler/bin/wrangler.js'),'pages','deploy',publicDir,'--project-name','olda-itfit','--branch','main','--force'],{cwd:directory,encoding:'utf8',maxBuffer:8*1024*1024,env:environment});
+    if(result.stdout)process.stdout.write(hideSecrets(result.stdout,environment));
+    if(result.stderr)process.stderr.write(hideSecrets(result.stderr,environment));
+    if(result.status!==0)throw wranglerFailure(result,environment);
+    console.log('Původní Oldova aplikace deployed: https://olda.itfit.cz/');
+  }finally{await rm(directory,{recursive:true,force:true});}
+}
 export async function deployPages({accountId,token}) {
   const api=cloudflareAPI(accountId,token);
   console.log('[Moje tempo] Krok: samostatná databáze D1 a projekt Pages');
@@ -97,6 +120,8 @@ export async function deployPages({accountId,token}) {
     if(result.status!==0)throw wranglerFailure(result,environment);
     console.log('[Moje tempo] Krok: připojení moje.itfit.cz k projektu Pages');
     await attachDomain(api);
+    console.log('[Moje tempo] Krok: původní Oldova aplikace se stejnou D1');
+    await deployOriginalOlda({api,database,accountId,token});
     console.log(`Moje tempo Pages deployed: https://${PROJECT}.pages.dev/`);
     console.log(`DNS CNAME: moje -> ${PROJECT}.pages.dev ; vlastní doména ${DOMAIN}`);
   }finally{await rm(stage.directory,{recursive:true,force:true});}

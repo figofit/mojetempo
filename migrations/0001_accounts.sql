@@ -26,3 +26,23 @@ CREATE TABLE IF NOT EXISTS invitation_claims (
   account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   claimed_at INTEGER NOT NULL, applied_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS diary_links (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES accounts(id),
+  coach_id TEXT NOT NULL REFERENCES accounts(id),
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS diary_history (
+  account_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  state TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(account_id,revision)
+);
+CREATE TABLE IF NOT EXISTS legacy_imports (
+  source_id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id),
+  source_revision TEXT NOT NULL,
+  source_json TEXT NOT NULL,
+  imported_at INTEGER NOT NULL
+);

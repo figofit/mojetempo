@@ -1,6 +1,7 @@
 /** Framework-free activity journal rules. Dates are local calendar dates. */
 import {validMobilityExercises,mobilityExerciseNames} from './mobility-catalog.mjs';
 import {activeRest} from './schedule-rules.mjs';
+import {PERSONAL_DEFAULTS,personalEntry} from './personal.mjs';
 export const ACTIVITY_TYPES = Object.freeze([
   { id: 'strength', label: 'Posilovna', icon: 'dumbbell', category: 'movement', color: '#487766', unit: 'min' },
   { id: 'cycling', label: 'Kolo', icon: 'bike', category: 'movement', color: '#90a96b', unit: 'min' },
@@ -14,6 +15,7 @@ export const ACTIVITY_TYPES = Object.freeze([
   { id: 'recovery', label: 'Regenerace', icon: 'moon', category: 'recovery', color: '#899ca3', unit: 'min' },
   { id: 'steps', label: 'Kroky', icon: 'footprints', category: 'steps', color: '#6388b6', unit: 'kroků' },
   { id: 'moment', label: 'Moment do kroniky', icon: 'image', category: 'chronicle', color: '#ab886d', unit: '' },
+  { id: 'day', label: 'Denní zápis / energie', icon: 'calendar', category: 'chronicle', color: '#82a991', unit: '' },
 ]);
 
 export const MODULES = Object.freeze([
@@ -117,6 +119,7 @@ export function strengthTargets(input={}) {
 }
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  ...PERSONAL_DEFAULTS,
   name: 'Moje tempo',
   modules: Object.freeze(MODULES.map((module) => module.id)),
   weeklyMinutes: 150,
@@ -176,7 +179,7 @@ function makeId() {
 export function validateEntry(input, today = localDate()) {
   input = input && typeof input === 'object' ? input : {};
   const errors = [];
-  const independent = input.type === 'steps' || input.type === 'moment';
+  const independent = ['steps','moment','day'].includes(input.type)||input.durationUnknown===true;
   const duration = optionalNumber(input.duration, independent ? 0 : NaN);
   const steps = optionalNumber(input.steps);
   const distance = optionalNumber(input.distance);
@@ -190,13 +193,14 @@ export function validateEntry(input, today = localDate()) {
   if (!parseDate(date)) errors.push('Zadej platné datum.');
   else if (date > today) errors.push('Deník je pro dokončené aktivity. Datum nemůže být v budoucnosti.');
   if (!Number.isInteger(duration) || duration < (independent ? 0 : 1) || duration > 1440) errors.push(independent ? 'Délka zápisu musí být celé číslo od 0 do 1 440 minut.' : 'Délka aktivity musí být 1 až 1 440 celých minut.');
+  if(input.durationUnknown===true&&duration!==0)errors.push('Neznámý čas ponech bez minut.');
   if (!Number.isInteger(steps) || steps < 0 || steps > 200000) errors.push('Kroky musí být celé číslo od 0 do 200 000.');
   if (!Number.isFinite(distance) || distance < 0 || distance > 2000) errors.push('Vzdálenost musí být od 0 do 2 000 km.');
   if (!Number.isInteger(elevation) || elevation < 0 || elevation > 20000) errors.push('Převýšení musí být celé číslo od 0 do 20 000 metrů.');
   if (input.type === 'steps' && (!Number.isInteger(steps) || steps <= 0)) errors.push('Pro zápis kroků zadej kladný počet kroků.');
   if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 5)) errors.push('Nálada musí být na stupnici 1 až 5.');
-  if (title.length > 120) errors.push('Název může mít nejvýše 120 znaků.');
-  if (note.length > 3000) errors.push('Poznámka může mít nejvýše 3 000 znaků.');
+  if (title.length > 160) errors.push('Název může mít nejvýše 160 znaků.');
+  if (note.length > 4000) errors.push('Poznámka může mít nejvýše 4 000 znaků.');
   if (input.type === 'moment' && !title && !note && !(typeof input.photoId === 'string' && input.photoId.trim())) errors.push('Moment do kroniky potřebuje název, poznámku nebo fotografii.');
   let location;
   if (input.location != null) {
@@ -212,14 +216,17 @@ export function validateEntry(input, today = localDate()) {
   }
   if(input.workout!=null) {
     const w=input.workout;
-    if(!['strength','home'].includes(input.type)||!w||typeof w!=='object'||!WORKOUT_FOCUSES.some(f=>f.id===w.focus)||!Array.isArray(w.exercises)||w.exercises.length>50) errors.push('Silový trénink potřebuje platné zaměření a nejvýše 50 cviků.');
+    if(!['strength','home'].includes(input.type)||!w||typeof w!=='object'||!WORKOUT_FOCUSES.some(f=>f.id===w.focus)||!Array.isArray(w.exercises)||w.exercises.length>80) errors.push('Silový trénink potřebuje platné zaměření a nejvýše 80 cviků.');
     else {
       const splitName=typeof w.splitName==='string'?w.splitName.trim():'';
       if(splitName.length>80||w.focus==='custom'&&!splitName)errors.push('Vlastní split pojmenuj nejvýše 80 znaky.');
       const exercises=[];
       for(const exercise of w.exercises) {
-        if(!exercise||!MOVEMENT_PATTERNS.some(p=>p.id===exercise.pattern)||!Number.isInteger(exercise.sets)||exercise.sets<1||exercise.sets>50||exercise.name!=null&&typeof exercise.name!=='string'||typeof exercise.name==='string'&&exercise.name.trim().length>100) {errors.push('U každého cviku vyber pohybový vzor, 1 až 50 pracovních sérií a název do 100 znaků.');continue;}
-        exercises.push({pattern:exercise.pattern,sets:exercise.sets,name:(exercise.name||'').trim()});
+        if(!exercise||!MOVEMENT_PATTERNS.some(p=>p.id===exercise.pattern)||!Number.isInteger(exercise.sets)||exercise.sets<(exercise.setsUnknown===true?0:1)||exercise.sets>100||exercise.name!=null&&typeof exercise.name!=='string'||typeof exercise.name==='string'&&exercise.name.trim().length>120) {errors.push('U každého cviku vyber pohybový vzor, počet pracovních sérií a název do 120 znaků.');continue;}
+        const detail={pattern:exercise.pattern,sets:exercise.sets,name:(exercise.name||'').trim()};
+        if(exercise.setsUnknown===true)detail.setsUnknown=true;
+        for(const [key,max] of [['reps',10000],['weight',1500]])if(exercise[key]!==undefined&&exercise[key]!==null){const n=Number(exercise[key]);if(!Number.isFinite(n)||n<0||n>max||key==='reps'&&!Number.isInteger(n))errors.push('Neplatné opakování nebo zátěž.');else detail[key]=n;}
+        exercises.push(detail);
       }
       workout={focus:w.focus,splitName:w.focus==='custom'?splitName:'',exercises};
     }
@@ -242,6 +249,7 @@ export function validateEntry(input, today = localDate()) {
   if (location) entry.location = location;
   if (workout) entry.workout = workout;
   if (mobilityExercises) entry.mobilityExercises = mobilityExercises;
+  Object.assign(entry,personalEntry(input,errors));
   return { valid: errors.length === 0, errors, entry };
 }
 
@@ -263,7 +271,7 @@ export function computeStrengthStats(entries=[],settings=DEFAULT_SETTINGS,date=n
     let detailed=false;
     for(const exercise of workout?.exercises||[]) {
       const pattern=byId.get(exercise.pattern);
-      if(pattern&&Number.isInteger(exercise.sets)&&exercise.sets>=1&&exercise.sets<=50){pattern.sets+=exercise.sets;detailed=true;}
+      if(pattern&&Number.isInteger(exercise.sets)&&exercise.sets>=1&&exercise.sets<=100){pattern.sets+=exercise.sets;detailed=true;}
     }
     if(detailed)detailedSessions++;
   }

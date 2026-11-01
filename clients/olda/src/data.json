@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "clientId": "olda-4-0",
+  "revision": "darek-2026",
+  "updatedAt": null,
+  "profile": {
+    "name": "Osobní prostor",
+    "salutation": "Ahoj",
+    "birthday": "2000-01-01",
+    "age": 40,
+    "startDate": "",
+    "dedication": "Každý malý krok má své místo. Společný příběh začíná prvním zápisem.",
+    "signature": "Tvůj tým",
+    "vaultUrl": ""
+  },
+  "plan": {
+    "title": "Osobní plán",
+    "focus": "",
+    "notes": "",
+    "exercises": []
+  },
+  "habits": [],
+  "sessions": [],
+  "days": [],
+  "milestones": []
+}

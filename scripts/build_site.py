@@ -26,6 +26,7 @@ PUBLIC_FILES = (
     "appearance.mjs",
     "app.js",
     "domain.mjs",
+    "personal.mjs",
     "storage.mjs",
     "local-storage.mjs",
     "sync-rules.mjs",

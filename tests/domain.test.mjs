@@ -46,8 +46,8 @@ test('validation normalizes optional fields, retains photo identifiers and does 
   assert.equal(result.entry.note, 'Dobrý den.');
   assert.equal(result.entry.photoId, 'photo-1');
   assert.equal(input.title, '  Procházka  ');
-  assert.equal(validateEntry(sample({ title: 'x'.repeat(121) })).valid, false);
-  assert.equal(validateEntry(sample({ note: 'x'.repeat(3001) })).valid, false);
+  assert.equal(validateEntry(sample({ title: 'x'.repeat(161) })).valid, false);
+  assert.equal(validateEntry(sample({ note: 'x'.repeat(4001) })).valid, false);
 });
 
 test('steps can be logged without a workout but require a positive step count', () => {

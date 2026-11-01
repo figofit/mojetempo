@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 
 export const ROOT=fileURLToPath(new URL('../',import.meta.url));
 export function buildPublic() {
-  const result=spawnSync('python3',['scripts/build_site.py'],{cwd:ROOT,stdio:'inherit'});
+  const result=spawnSync(process.env.PYTHON||'python3',['scripts/build_site.py'],{cwd:ROOT,stdio:'inherit'});
   if(result.status!==0)throw new Error('Sestavení veřejné aplikace selhalo.');
 }
 export async function preparePages() {

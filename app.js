@@ -4,14 +4,16 @@ import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAcc
 import {MOBILITY_EXERCISES,mobilityExerciseNames} from './mobility-catalog.mjs';
 import {scheduleSettings,activeRest,trainingAge,endRest} from './schedule-rules.mjs';
 import { renderInvitation } from './invitation.mjs';
-import { habitSettings, renderTodayHabits, renderHabitSettings, toggleHabit } from './habits.mjs';
+import { habitSettings, renderTodayHabits, renderHabitSettings, renderHabitJournal, toggleHabit } from './habits.mjs';
 import { planningSettings, renderTodayPlan, renderWeeklyPlan, renderPlanEditor, handlePlanAction, handlePlanSubmit } from './planning.mjs';
 import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
+import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
 
-const appearance=siteAppearance(location.href);
-applyAppearance(appearance,document);
+const originalOlda=window.ITFIT_ORIGINAL||null;
+const appearance=originalOlda?{title:'Olda 4.0 · ITFIT',id:'original-olda'}:siteAppearance(location.href);
+if(!originalOlda)applyAppearance(appearance,document);
 
 const paths = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -66,6 +68,7 @@ let strengthPeriod='week';
 let exerciseFilter='all', exerciseQuery='', planDirty=false;
 let renderedAccountRole,renderedDate;
 let habitsOpen=false;
+let habitJournalDate=localDate();
 let planReference=new Date();
 let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
@@ -81,6 +84,7 @@ function notify(message, error = false) {
 }
 
 async function persist(update) {
+  if(originalOlda&&!document.body.classList.contains('olda-editing'))throw new Error('Otevři společný zápis malou šipkou vpravo dole.');
   if (!storageReady) throw new Error('Úložiště není dostupné. Povol ukládání dat v prohlížeči a obnov stránku.');
   state = await updateState(current => update(current || {version:1,entries:[],settings:{...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]},onboardingComplete:false}));
   syncChannel?.postMessage('changed');
@@ -115,9 +119,9 @@ function monthCalendar(stats) {
 function activityRow(entry, removable = false) {
   const type = typeById(entry.type);
   if (!type) return '';
-  const amount=entry.type==='steps'?`${number(entry.steps)}<small> kroků</small>`:entry.type==='moment'?'Moment':`${number(entry.duration)}<small> min</small>`;
+  const amount=entry.type==='steps'?`${number(entry.steps)}<small> kroků</small>`:['moment','day'].includes(entry.type)?(entry.type==='day'?'Den':'Moment'):entry.durationUnknown?'Bez času':`${number(entry.duration)}<small> min</small>`;
   const category={movement:'Pohyb',recovery:'Regenerace',steps:'Kroky',chronicle:'Kronika'}[type.category];
-  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.workout?renderWorkoutDetails(entry.workout):''}${renderMobilityDetails(entry)}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
+  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.workout?renderWorkoutDetails(entry.workout):''}${renderMobilityDetails(entry)}${entry.together?'<small class="personal-detail">Spolu s Michalem</small>':''}${entry.energy!=null?'<small class="personal-detail">Energie '+entry.energy+' / 5</small>':''}${Object.entries(entry.values||{}).map(([key,value])=>{const field=state.settings.personalFields?.find(f=>f.id===key);return '<small class="personal-detail">'+esc(field?.name||key)+': '+esc(typeof value==='boolean'?(value?'Ano':'Ne'):value)+' '+esc(field?.unit||'')+'</small>';}).join('')}${entry.exerciseDetails?.length?'<details class="workout-details"><summary>Cviky</summary>'+entry.exerciseDetails.map(e=>'<p>'+esc(e.name)+' · '+e.sets+' × '+e.reps+' · '+e.weight+' kg</p>').join('')+'</details>':''}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
 }
 
 function renderMobilityDetails(entry) {
@@ -127,7 +131,7 @@ function renderMobilityDetails(entry) {
 
 function renderWorkoutDetails(workout) {
   const total=workout.exercises.reduce((sum,exercise)=>sum+exercise.sets,0);
-  return `<details class="workout-details"><summary>${esc(workoutLabel(workout))} · ${total} pracovních sérií</summary><ul>${workout.exercises.map(exercise=>`<li><strong>${esc(exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik')}</strong> · ${exercise.sets} sérií${exercise.name?' · '+esc(MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||''):''}</li>`).join('')}</ul>${!total?'<small>Cviky zatím nejsou vyplněné.</small>':''}</details>`;
+  return `<details class="workout-details"><summary>${esc(workoutLabel(workout))} · ${total} pracovních sérií</summary><ul>${workout.exercises.map(exercise=>`<li><strong>${esc(exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik')}</strong> · ${exercise.setsUnknown?'—':exercise.sets} sérií${exercise.reps!=null?' × '+exercise.reps+' opak.':''}${exercise.weight!=null?' · '+exercise.weight+' kg':''}${exercise.name?' · '+esc(MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||''):''}</li>`).join('')}</ul>${!total?'<small>Cviky zatím nejsou vyplněné.</small>':''}</details>`;
 }
 
 function visibleEntries() {
@@ -149,7 +153,7 @@ function renderToday() {
 }
 
 function renderPlan() {
-  return `${heading('Můj týden, moje tempo.', 'Kolo, fitko, bazén i vlastní priority. Sestav si rytmus, který ti sedí.','<span class="tag">Vlastní týdenní plán</span>')}${demo?'<p class="form-notice">Tady si nastavíš svůj vlastní plán. První úpravou začneš vlastní deník.</p>':''}${renderWeeklyPlan(state.settings,planReference)}${renderPlanEditor(state.settings)}`;
+  return `${heading('Můj týden, moje tempo.', 'Kolo, fitko, bazén i vlastní priority. Sestav si rytmus, který ti sedí.','<span class="tag">Vlastní týdenní plán</span>')}${demo?'<p class="form-notice">Tady si nastavíš svůj vlastní plán. První úpravou začneš vlastní deník.</p>':''}${renderWeeklyPlan(state.settings,planReference)}${renderPlanEditor(state.settings)}${renderPersonalPlan(state.settings)}`;
 }
 
 function renderTrainingAge() {
@@ -258,16 +262,19 @@ function render() {
   photoUrls.forEach(url=>URL.revokeObjectURL(url));photoUrls=[];
   const revision=++renderRevision;
   const stats=computeStats(visibleEntries(),state.settings);
-  $('#main-nav').innerHTML=Object.entries(viewIcons).map(([view,symbol])=>`<a href="#${view}" class="nav-item ${currentView===view?'active':''}" ${currentView===view?'aria-current="page"':''}>${icon(symbol)}<span>${views[view]}</span>${view==='diary'?`<small class="nav-count">${visibleEntries().length}</small>`:''}</a>`).join('');
+  $('#main-nav').innerHTML=Object.entries(viewIcons).map(([view,symbol])=>`<a href="#${view}" class="nav-item ${currentView===view?'active':''}" ${currentView===view?'aria-current="page"':''}>${icon(symbol)}<span>${originalOlda?.labels?.[view]||views[view]}</span>${view==='diary'?`<small class="nav-count">${visibleEntries().length}</small>`:''}</a>`).join('');
   $('#settings-nav').innerHTML=icon('settings')+'Cíle a nastavení';
   $('#settings-nav').classList.toggle('active',currentView==='settings');
   $('#demo-toggle').innerHTML=icon('eye')+(demo?'Zpět do mého deníku':'Prohlédnout ukázku');
   $('#privacy-label').innerHTML=icon('shield')+'Jen pro tebe';
-  $('.sidebar-profile strong').textContent=state.settings.name||'Moje tempo';
+  $('.sidebar-profile strong').textContent=originalOlda?'Olda 4.0':state.settings.name||'Moje tempo';
   $('#breadcrumb-current').textContent=views[currentView];
   $('#demo-banner').innerHTML=demo?'<div class="demo-banner"><div><strong>Prohlížíš ukázkový deník.</strong> Tyto aktivity jsou pouze ilustrační.</div><button class="button small secondary" data-action="start-own">Začít vlastní deník '+icon('arrow')+'</button></div>':'';
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
-  $('#view-content').innerHTML=renderers[currentView]();
+  const allowed=!originalOlda||!!getAccount().diary;
+  $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount())+(allowed?renderToday():''):renderers[currentView]();
+  if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings));
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
   document.title=`${views[currentView]} · ${appearance.title}`;
@@ -282,7 +289,7 @@ function navigate(view) {
     previewInvitation(invitationCode).then(data=>{if(invitationRevision===revision){invitationData=data;if(currentView==='invite')render();}}).catch(error=>{if(invitationRevision===revision){invitationError=error.message;if(currentView==='invite')render();}});
     return;
   }
-  const next=Object.hasOwn(views,view)?view:'overview';
+  const next=Object.hasOwn(views,view)?view:(originalOlda?.routes?.[view]||'overview');
   if(currentView!==next){settingsDirty=false;planDirty=false;}
   currentView=next;
   render();
@@ -308,10 +315,12 @@ function planCallbacks() {
 }
 
 async function openEntry(id=null, preset={}) {
+  if(originalOlda&&!document.body.classList.contains('olda-editing')){notify('Společný zápis otevřeš malou šipkou vpravo dole.');return;}
   if(demo) await startOwn();
   const available=ACTIVITY_TYPES.filter(type=>moduleOn(type.category));
   if(!available.length) {location.hash='modules';notify('Zapni nejprve alespoň jeden modul.');return;}
   $('#entry-form').reset();
+  $('#personal-entry-fields').innerHTML=personalSettings(state.settings).personalFields.map(f=>`<label class="form-field">${esc(f.name)} ${esc(f.unit)}${f.type==='boolean'?`<select data-personal-value="${f.id}"><option value="">Bez údaje</option><option value="true">Ano</option><option value="false">Ne</option></select>`:`<input data-personal-value="${f.id}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':'maxlength="1000"'}>`}</label>`).join('');
   $('#workout-focus').innerHTML=WORKOUT_FOCUSES.map(focus=>`<option value="${focus.id}">${esc(focus.label)}</option>`).join('');
   $('#workout-exercises').replaceChildren();
   $('#mobility-exercises').innerHTML=MOBILITY_EXERCISES.map(exercise=>`<label><input type="checkbox" data-mobility-id="${exercise.id}" />${esc(exercise.name)}</label>`).join('');
@@ -332,10 +341,15 @@ async function openEntry(id=null, preset={}) {
     if(!entry)throw new Error('Zápis už neexistuje.');
     for(const name of ['type','date','duration','steps','distance','elevation','title','note']) $('#entry-form').elements[name].value=entry[name]??'';
     if(entry.mood)$('#entry-form').elements.mood.value=entry.mood;
+    $('#entry-form').elements.together.checked=entry.together===true;
+    $('#entry-form').elements.durationUnknown.checked=entry.durationUnknown===true;
+    $('#entry-form').elements.energy.value=entry.energy??'';
+    for(const field of document.querySelectorAll('[data-personal-value]'))field.value=entry.values?.[field.dataset.personalValue]??'';
     for(const checkbox of document.querySelectorAll('[data-mobility-id]'))checkbox.checked=(entry.mobilityExercises||[]).includes(checkbox.dataset.mobilityId);
     $('#mobility-custom').value=(entry.mobilityExercises||[]).filter(id=>id.startsWith('custom:')).map(id=>id.slice(7)).join('\n');
     if(entry.location)selectPlace(entry.location);
     if(entry.workout){$('#workout-focus').value=entry.workout.focus;$('#workout-split').value=entry.workout.splitName||'';entry.workout.exercises.forEach(exercise=>addExercise(exercise));}
+    if(entry.exerciseDetails)$('#personal-entry-fields').insertAdjacentHTML('beforeend',`<fieldset id="legacy-exercise-fields" class="place-fields"><legend>Dosavadní cviky</legend>${entry.exerciseDetails.map(e=>`<div class="legacy-exercise-row"><label class="form-field">Cvik<input name="legacy-name" maxlength="120" value="${esc(e.name)}" required></label><label class="form-field">Série<input name="legacy-sets" type="number" min="0" max="100" value="${e.sets}" required></label><label class="form-field">Opakování<input name="legacy-reps" type="number" min="0" max="10000" value="${e.reps}" required></label><label class="form-field">kg<input name="legacy-weight" type="number" min="0" max="1500" step="any" value="${e.weight}" required></label></div>`).join('')}</fieldset>`);
   }
   $('#entry-heading').textContent=id?'Upravit aktivitu':'Zapsat aktivitu';
   $('#entry-error').textContent='';
@@ -351,9 +365,10 @@ async function openEntry(id=null, preset={}) {
 
 function syncEntryFields() {
   const type=$('#entry-type').value;
-  const timed=!['steps','moment'].includes(type);
+  const timed=!['steps','moment','day'].includes(type);
   $('#entry-duration-field').classList.toggle('hidden',!timed);
-  $('#entry-form [name="duration"]').required=timed;
+  $('#entry-form [name="duration"]').required=timed&&!$('#entry-form').elements.durationUnknown.checked;
+  $('#entry-form [name="duration"]').min=$('#entry-form').elements.durationUnknown.checked?'0':'1';
   $('#entry-form [name="steps"]').required=type==='steps';
   $('#entry-steps-field').classList.toggle('hidden',!moduleOn('steps')||type==='moment');
   $('#entry-chronicle-fields').classList.toggle('hidden',!moduleOn('chronicle'));
@@ -369,10 +384,14 @@ function syncWorkoutFields() {
   $('#workout-split-field').classList.toggle('hidden',!custom);$('#workout-split').required=active&&custom;
 }
 function addExercise(exercise={pattern:'squat',name:'',sets:3}) {
-  if(document.querySelectorAll('.exercise-row').length>=50)throw new Error('Do jednoho tréninku lze zapsat nejvýše 50 cviků.');
+  if(document.querySelectorAll('.exercise-row').length>=80)throw new Error('Do jednoho tréninku lze zapsat nejvýše 80 cviků.');
   const row=document.createElement('div');row.className='exercise-row';
   row.innerHTML=`<label class="form-field">Pohybový vzor<select class="exercise-pattern" required>${MOVEMENT_PATTERNS.map(pattern=>`<option value="${pattern.id}">${esc(pattern.label)}</option>`).join('')}</select></label><label class="form-field">Cvik <span class="form-hint">nepovinné</span><input class="exercise-name" maxlength="100" placeholder="Např. dřep s činkou" /></label><div class="exercise-sets-row"><label class="form-field">Pracovní série<input class="exercise-sets" type="number" min="1" max="50" step="1" required /></label><button class="icon-button" type="button" data-action="remove-exercise" aria-label="Odebrat cvik">${icon('trash')}</button></div>`;
   row.querySelector('.exercise-pattern').value=exercise.pattern;row.querySelector('.exercise-name').value=exercise.name||'';row.querySelector('.exercise-sets').value=exercise.sets;
+  row.querySelector('.exercise-name').maxLength=120;
+  row.querySelector('.exercise-sets').max='100';
+  row.querySelector('.exercise-sets').min='0';row.querySelector('.exercise-sets').required=false;
+  row.insertAdjacentHTML('beforeend',`<label class="form-field">Opakování<input class="exercise-reps" type="number" min="0" max="10000" step="1" value="${exercise.reps??''}"></label><label class="form-field">Zátěž (kg)<input class="exercise-weight" type="number" min="0" max="1500" step="0.25" value="${exercise.weight??''}"></label>`);
   $('#workout-exercises').append(row);
 }
 
@@ -457,19 +476,29 @@ async function submitEntry(event) {
   event.preventDefault();
   const form=event.currentTarget;
   const values=Object.fromEntries(new FormData(form));
+  values.together=form.elements.together.checked;
+  values.durationUnknown=form.elements.durationUnknown.checked;
+  if(values.durationUnknown)values.duration=0;
+  values.energy=form.elements.energy.value===''?null:Number(form.elements.energy.value);
+  values.values={};
+  for(const field of document.querySelectorAll('[data-personal-value]'))if(field.value!==''){
+    const definition=state.settings.personalFields.find(f=>f.id===field.dataset.personalValue);
+    values.values[definition.id]=definition.type==='number'?Number(field.value):definition.type==='boolean'?field.value==='true':field.value;
+  }
   if(['strength','home'].includes(values.type)) {
-    const exercises=[...document.querySelectorAll('.exercise-row')].map(row=>({pattern:row.querySelector('.exercise-pattern').value,name:row.querySelector('.exercise-name').value,sets:Number(row.querySelector('.exercise-sets').value)}));
+    const exercises=[...document.querySelectorAll('.exercise-row')].map(row=>({pattern:row.querySelector('.exercise-pattern').value,name:row.querySelector('.exercise-name').value,sets:Number(row.querySelector('.exercise-sets').value),...(Number(row.querySelector('.exercise-sets').value)===0?{setsUnknown:true}:{}),...(row.querySelector('.exercise-reps').value!==''?{reps:Number(row.querySelector('.exercise-reps').value)}:{}),...(row.querySelector('.exercise-weight').value!==''?{weight:Number(row.querySelector('.exercise-weight').value)}:{})}));
     const focus=$('#workout-focus').value;
     if(focus!=='unspecified'||exercises.length)values.workout={focus,splitName:$('#workout-split').value,exercises};
   }
   if(values.type==='mobility')values.mobilityExercises=[...new Set([...document.querySelectorAll('[data-mobility-id]:checked')].map(el=>el.dataset.mobilityId).concat($('#mobility-custom').value.split(/\r?\n/).map(name=>name.trim()).filter(Boolean).map(name=>'custom:'+name)))];
   const previous=editingEntryId?state.entries.find(entry=>entry.id===editingEntryId):null;
+  if($('#legacy-exercise-fields'))values.exerciseDetails=[...document.querySelectorAll('.legacy-exercise-row')].map(row=>({name:row.querySelector('[name="legacy-name"]').value,sets:Number(row.querySelector('[name="legacy-sets"]').value),reps:Number(row.querySelector('[name="legacy-reps"]').value),weight:Number(row.querySelector('[name="legacy-weight"]').value)}));
   if(previous?.photoId)values.photoId=previous.photoId;
   if($('#place-query').value.trim()||$('#place-latitude').value||$('#place-longitude').value) {
     if(!$('#place-latitude').value||!$('#place-longitude').value){$('#entry-error').textContent='Vyber místo z výsledků, použij polohu nebo doplň obě souřadnice. Samotný název do mapy nestačí.';return;}
     values.location={name:$('#place-query').value,latitude:Number($('#place-latitude').value),longitude:Number($('#place-longitude').value)};
   }
-  if(['steps','moment'].includes(values.type)) values.duration=0;
+  if(['steps','moment','day'].includes(values.type)) values.duration=0;
   if(values.type==='moment') values.steps=0;
   if(values.photo?.size&&moduleOn('chronicle')) values.photoId='pending';
   const result=validateEntry(values);
@@ -512,7 +541,7 @@ function validatedSettings(input) {
   const output={...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]};
   if(input?.name!==undefined){if(typeof input.name!=='string'||!input.name.trim()||input.name.trim().length>80)throw new Error('Jméno v deníku může mít 1 až 80 znaků.');output.name=input.name.trim();}
   Object.assign(output,strengthTargets(input));
-  Object.assign(output,librarySettings(input),planningSettings(input),habitSettings(input),scheduleSettings(input));
+  Object.assign(output,personalSettings(input),librarySettings(input),planningSettings(input),habitSettings(input),scheduleSettings(input));
   for(const [key,max] of Object.entries(limits)) {
     const value=Number(input?.[key]);
     if(!Number.isInteger(value)||value<1||value>max) throw new Error('Cíle musí být celá kladná čísla v povoleném rozsahu.');
@@ -525,12 +554,14 @@ function validatedSettings(input) {
 
 function renderAccountStatus() {
   const account=getAccount();
+  $('#account-profile').dataset.signedIn=account.diary?'true':'false';
   $('#account-profile').textContent=account.user?account.user.login:'Osobní deník · v tomto prohlížeči';
   $('#account-status').innerHTML=account.user?`<div class="account-status"><span>${icon('shield')}<strong>${esc(account.status)}</strong></span><button class="button ghost small" data-action="sync-account">Synchronizovat</button></div>`:'';
+  if(account.user)$('#account-status').insertAdjacentHTML('beforeend',`<div class="diary-context"><span>${account.scope==='olda'?'Oldův deník · '+(account.diary?.mode==='coach'?'společný zápis s Michalem':'osobní účet'):'Tvůj osobní deník'}</span>${!originalOlda&&account.diaries.some(d=>d.id==='olda'&&d.mode==='coach')?`<a class="button ghost small" href="${account.scope?'./':'?denik=olda'}">${account.scope?'Můj deník':'Oldův deník'}</a>`:''}<button class="button ghost small" data-action="logout-account">Odhlásit</button></div>`);
 }
 async function refreshDiary() {
   state=(await loadState())||emptyDiary();
-  demo=!state.onboardingComplete&&!state.entries.length;
+  demo=!originalOlda&&!state.onboardingComplete&&!state.entries.length;
   render();
 }
 function openAccount() {
@@ -613,6 +644,8 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(name==='personal-plan-add'){$('#personal-plan-rows').insertAdjacentHTML('beforeend',personalPlanRow());return;}
+  if(name==='personal-row-remove'){element.closest('.personal-plan-row').remove();return;}
   if(['plan-prev','plan-next','plan-today'].includes(name)){if(name==='plan-today')planReference=new Date();else{planReference=new Date(planReference);planReference.setDate(planReference.getDate()+(name==='plan-prev'?-7:7));}render();return;}
   if(name==='end-rest'){await persist(current=>({...current,settings:{...current.settings,...endRest(current.settings,element.dataset.restId)}}));render();notify('Plnění plánu a cílů je znovu aktivní.');return;}
   if(name==='remove-rest'){await persist(current=>({...current,settings:{...current.settings,restPeriods:(current.settings.restPeriods||[]).filter(period=>period.id!==element.dataset.restId)}}));render();return;}
@@ -652,7 +685,7 @@ async function action(name,element) {
   if(name==='load-server'&&confirm('Nahradit neodeslané změny na tomto zařízení verzí z účtu? Nejdříve si stáhni celou zálohu.')){await loadServerVersion();await refreshDiary();}
   if(name==='close-entry') $('#entry-dialog').close();
   if(name==='start-own') await startOwn();
-  if(name==='toggle-demo') {if(demo) await startOwn();else {demo=true;demoEntries=createDemoEntries();render();}}
+  if(name==='toggle-demo'&&!originalOlda) {if(demo) await startOwn();else {demo=true;demoEntries=createDemoEntries();render();}}
   if(name==='delete') await removeEntry(element.dataset.id);
   if(name==='csv') {download(exportCSV(visibleEntries()),`moje-tempo${demo?'-ukazka':''}-${localDate()}.csv`,'text/csv;charset=utf-8');notify('CSV je připravené ke stažení.');}
   if(name==='ics') {download(exportICS(visibleEntries()),`moje-tempo${demo?'-ukazka':''}.ics`,'text/calendar;charset=utf-8');notify('Soubor .ics můžeš importovat v nastavení Google Kalendáře.');}
@@ -661,6 +694,7 @@ async function action(name,element) {
 }
 
 document.addEventListener('click',event=>{
+  const oldPage=event.target.closest('[data-page]');if(originalOlda&&oldPage){location.hash=originalOlda.routes[oldPage.dataset.page]||'overview';return;}
   const exerciseFilterButton=event.target.closest('[data-exercise-filter]');if(exerciseFilterButton){exerciseFilter=exerciseFilterButton.dataset.exerciseFilter;renderExerciseLibrary();return;}
   const period=event.target.closest('[data-strength-period]');if(period){strengthPeriod=period.dataset.strengthPeriod;render();return;}
   const mode=event.target.closest('[data-auth-mode]');if(mode){setAuthMode(mode.dataset.authMode);return;}
@@ -679,6 +713,7 @@ document.addEventListener('toggle',event=>{if(event.target.matches?.('.today-hab
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1)));
 document.addEventListener('change',async event=>{
   const el=event.target;
+  if(el.id==='habit-log-date'){habitJournalDate=el.value||localDate();if(habitJournalDate>localDate())habitJournalDate=localDate();render();return;}
   if(el.dataset.habit) {
     el.disabled=true;
     try {
@@ -697,6 +732,25 @@ document.addEventListener('change',async event=>{
   }
 });
 document.addEventListener('submit',async event=>{
+  if(event.target.matches('.custom-habit-editor')) {
+    event.preventDefault();
+    try {const values=Object.fromEntries(new FormData(event.target)),id=event.target.dataset.habitId;await persist(current=>{const archived=values.archived==='on',customHabits=current.settings.customHabits.map(h=>h.id===id?{...h,name:values.name,note:values.note,target:Number(values.target),archived}:h),habits=archived?current.settings.habits.filter(h=>h!==id):[...new Set([...current.settings.habits,id])];return {...current,settings:{...current.settings,...personalSettings({...current.settings,customHabits}),habits}};});render();notify('Návyk je uložený. Historie zůstala zachovaná.');}catch(error){notify(error.message,true);}return;
+  }
+  if(['personal-plan-form','custom-habit-form','personal-field-form'].includes(event.target.id)) {
+    event.preventDefault();
+    try {
+      const values=Object.fromEntries(new FormData(event.target));
+      await persist(current=>{
+        const settings={...current.settings};
+        if(event.target.id==='personal-plan-form')settings.personalPlan={...values,exercises:[...event.target.querySelectorAll('.personal-plan-row')].map(row=>({name:row.querySelector('[name="planName"]').value,dose:row.querySelector('[name="planDose"]').value,note:row.querySelector('[name="planNote"]').value}))};
+        if(event.target.id==='custom-habit-form'){const habit={id:'custom-'+crypto.randomUUID(),name:values.name,note:values.note,target:Number(values.target),archived:false};settings.customHabits=[...(settings.customHabits||[]),habit];settings.habits=[...settings.habits,habit.id];}
+        if(event.target.id==='personal-field-form')settings.personalFields=[...(settings.personalFields||[]),{id:'field-'+crypto.randomUUID(),...values}];
+        return {...current,settings:{...settings,...personalSettings(settings)},onboardingComplete:true};
+      });
+      demo=false;planDirty=false;render();notify('Uloženo do společného deníku.');
+    }catch(error){notify(error.message,true);}
+    return;
+  }
   if(event.target.id==='rest-form'){
     event.preventDefault();
     try {const values=Object.fromEntries(new FormData(event.target));const period={id:'pause-'+crypto.randomUUID(),...values};await persist(current=>({...current,settings:{...current.settings,...scheduleSettings({...current.settings,restPeriods:[...(current.settings.restPeriods||[]),period]})}}));settingsDirty=false;render();notify('Volnější režim je uložený. Zápisy ve statistikách zůstávají.');}catch(error){notify(error.message,true);}
@@ -716,6 +770,7 @@ document.addEventListener('submit',async event=>{
 });
 $('#entry-form').addEventListener('submit',submitEntry);
 $('#entry-type').addEventListener('change',syncEntryFields);
+$('#entry-form [name="durationUnknown"]').addEventListener('change',syncEntryFields);
 $('#workout-focus').addEventListener('change',syncWorkoutFields);
 $('#entry-date').addEventListener('change',renderExerciseLibrary);
 $('#exercise-search').addEventListener('input',event=>{exerciseQuery=event.target.value;renderExerciseLibrary();});
@@ -762,7 +817,7 @@ try {
     if(!Array.isArray(saved.entries)||saved.entries.some(entry=>!validateEntry(entry).valid||typeof entry.id!=='string')) throw new Error('Uložený deník má neplatný formát. Původní data nebyla přepsána.');
     state={...saved,settings};
   }
-  demo=!state.onboardingComplete&&state.entries.length===0;
+  demo=!originalOlda&&!state.onboardingComplete&&state.entries.length===0;
   demoEntries=createDemoEntries();
   navigate(location.hash.slice(1));
   initializePWA({notify});

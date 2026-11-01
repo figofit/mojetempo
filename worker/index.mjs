@@ -6,6 +6,8 @@ import { habitSettings } from '../habits.mjs';
 import {scheduleSettings} from '../schedule-rules.mjs';
 import { accountRole, publicAccount, accountOverview } from './admin.mjs';
 import { invitationFor, publicInvitation, applyInvitation } from './invitations.mjs';
+import {personalSettings} from '../personal.mjs';
+import {diaryAccess,availableDiaries} from './diary-access.mjs';
 
 const enc=new TextEncoder();
 const COOKIE='__Host-tempo-session', LOCAL_COOKIE='tempo-local-session';
@@ -84,7 +86,7 @@ function validateState(input) {
   }
   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
   for(const [key,max] of Object.entries(limits)){const value=input.settings[key];if(!Number.isInteger(value)||value<1||value>max)fail(400,'Neplatný cíl.');settings[key]=value;}
-  try {Object.assign(settings,strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today),habitSettings(input.settings,today),scheduleSettings(input.settings,today));}catch(error){fail(400,error.message);}
+  try {Object.assign(settings,personalSettings(input.settings),strengthTargets(input.settings),librarySettings(input.settings),planningSettings(input.settings,today),habitSettings(input.settings,today),scheduleSettings(input.settings,today));}catch(error){fail(400,error.message);}
   if(!Array.isArray(input.settings.modules)||input.settings.modules.some(id=>!MODULES.some(m=>m.id===id)))fail(400,'Neplatné moduly.');
   settings.modules=[...new Set(input.settings.modules)];
   const used=new Set(),entries=input.entries.map(entry=>{
@@ -111,7 +113,12 @@ async function api(request,env) {
   if(!env.DB)fail(503,'Databáze zatím není připojená. Místní deník funguje dál.');
   const db=env.DB.withSession?env.DB.withSession('first-primary'):env.DB;
   await initialize(env.DB);
-  if(path==='/api/session'&&method==='GET')return json({user:publicAccount(await session(db,request),env)});
+  if(path==='/api/session'&&method==='GET') {
+    const account=await session(db,request),diaries=await availableDiaries(db,account);
+    let diary=null;
+    if(account){try{diary=await diaryAccess(db,account,request,env,fail);}catch(error){if(error.status!==403)throw error;}}
+    return json({user:publicAccount(account,env),diary,diaries});
+  }
   if(path==='/api/invitation/preview'&&method==='POST') {
     await rate(db,request,'invitation-preview','',30);
     const {code}=await body(request);
@@ -168,8 +175,9 @@ async function api(request,env) {
     if(token)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await digest(token)).run();
     return json({ok:true},200,{'Set-Cookie':cookie(request,'',0)});
   }
+  const diary=await diaryAccess(db,account,request,env,fail),ownerId=diary.ownerId;
   if(path==='/api/diary'&&method==='GET') {
-    const row=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(account.id).first();
+    const row=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(ownerId).first();
     return json({revision:row.revision,state:JSON.parse(row.state)});
   }
   if(path==='/api/diary'&&method==='PUT') {
@@ -180,36 +188,52 @@ async function api(request,env) {
     // current clients send explicit empty arrays when clearing their own data.
     const optional=Object.keys(DEFAULT_SETTINGS).filter(key=>!['modules','weeklyMinutes','weeklySessions','weeklyRecovery','dailySteps'].includes(key));
     if(data.state?.settings&&typeof data.state.settings==='object'&&!Array.isArray(data.state.settings)&&optional.some(key=>!Object.hasOwn(data.state.settings,key))) {
-      const previous=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(account.id).first();
+      const previous=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(ownerId).first();
       if(previous.revision!==data.revision)fail(409,'Deník se mezitím změnil na jiném zařízení.');
       const stored=JSON.parse(previous.state).settings;
       for(const key of optional)if(!Object.hasOwn(data.state.settings,key)&&Object.hasOwn(stored,key))data.state.settings[key]=stored[key];
     }
+    // Installed older clients may edit an entry without knowing its newer fields.
+    const previous=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(ownerId).first();
+    if(previous.revision!==data.revision)fail(409,'Deník se mezitím změnil na jiném zařízení.');
+    const priorEntries=new Map(JSON.parse(previous.state).entries.map(entry=>[entry.id,entry]));
+    for(const entry of Array.isArray(data.state?.entries)?data.state.entries:[]) {
+      if(!entry||typeof entry!=='object')continue;
+      const prior=priorEntries.get(entry.id);
+      if(prior)for(const key of ['together','energy','values','durationUnknown','exerciseDetails'])if(!Object.hasOwn(entry,key)&&Object.hasOwn(prior,key))entry[key]=prior[key];
+      if(prior?.workout&&Array.isArray(entry.workout?.exercises))for(let i=0;i<entry.workout.exercises.length;i++){
+        const before=prior.workout.exercises[i],after=entry.workout.exercises[i];
+        if(before&&after&&before.name===after.name&&before.pattern===after.pattern)for(const key of ['reps','weight','setsUnknown'])if(!Object.hasOwn(after,key)&&Object.hasOwn(before,key))after[key]=before[key];
+      }
+    }
     const state=validateState(data.state),serialized=JSON.stringify(state);
     if(enc.encode(serialized).length>MAX_STATE)fail(413,'Deník účtu překročil 1,5 MB. Stáhni si zálohu.');
-    const photos=await db.prepare('SELECT id FROM photos WHERE account_id=?').bind(account.id).all();
+    const photos=await db.prepare('SELECT id FROM photos WHERE account_id=?').bind(ownerId).all();
     const available=new Set(photos.results.map(p=>p.id));
     if(state.entries.some(entry=>entry.photoId&&!available.has(entry.photoId)))fail(400,'Nejdříve nahraj všechny fotografie.');
-    const row=await db.prepare('UPDATE diaries SET state=?,revision=revision+1,updated_at=? WHERE account_id=? AND revision=? RETURNING revision').bind(serialized,Date.now(),account.id,data.revision).first();
-    if(!row)fail(409,'Deník se mezitím změnil na jiném zařízení.');
+    const saved=await db.batch([
+      db.prepare('INSERT OR IGNORE INTO diary_history(account_id,revision,state,updated_at) SELECT account_id,revision,state,updated_at FROM diaries WHERE account_id=? AND revision=?').bind(ownerId,data.revision),
+      db.prepare('UPDATE diaries SET state=?,revision=revision+1,updated_at=? WHERE account_id=? AND revision=?').bind(serialized,Date.now(),ownerId,data.revision),
+    ]);
+    if(!saved[1].meta.changes)fail(409,'Deník se mezitím změnil na jiném zařízení.');
     // Remove only old unreferenced uploads. Another device may be uploading a new entry.
-    await db.prepare("DELETE FROM photos WHERE account_id=? AND created_at<? AND id NOT IN (SELECT json_extract(value,'$.photoId') FROM json_each(?) WHERE json_extract(value,'$.photoId') IS NOT NULL)").bind(account.id,Date.now()-86400000,JSON.stringify(state.entries)).run();
-    return json({revision:row.revision,state});
+    await db.prepare("DELETE FROM photos WHERE account_id=? AND created_at<? AND id NOT IN (SELECT json_extract(value,'$.photoId') FROM json_each(?) WHERE json_extract(value,'$.photoId') IS NOT NULL)").bind(ownerId,Date.now()-86400000,JSON.stringify(state.entries)).run();
+    return json({revision:data.revision+1,state});
   }
   const photoMatch=path.match(/^\/api\/photos\/([a-zA-Z0-9_-]{1,128})$/);
   if(photoMatch) {
     const id=photoMatch[1];
     if(method==='GET') {
-      const photo=await db.prepare('SELECT mime,bytes FROM photos WHERE account_id=? AND id=?').bind(account.id,id).first();
+      const photo=await db.prepare('SELECT mime,bytes FROM photos WHERE account_id=? AND id=?').bind(ownerId,id).first();
       if(!photo)fail(404,'Fotografie nebyla nalezena.');
       return new Response(binary(photo.bytes),{headers:{'Content-Type':photo.mime,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'}});
     }
     if(method==='PUT') {
       await rate(db,request,'photo',account.id,180);
       const bytes=await readLimited(request,MAX_PHOTO),mime=imageType(bytes);
-      const existing=await db.prepare('SELECT bytes FROM photos WHERE account_id=? AND id=?').bind(account.id,id).first();
+      const existing=await db.prepare('SELECT bytes FROM photos WHERE account_id=? AND id=?').bind(ownerId,id).first();
       if(existing){if(!equal(await digest(bytes),await digest(existing.bytes)))fail(409,'Fotografie má jiný obsah.');return json({ok:true});}
-      const result=await db.prepare('INSERT INTO photos(account_id,id,mime,bytes,created_at) SELECT ?,?,?,?,? WHERE (SELECT COALESCE(SUM(length(bytes)),0) FROM photos WHERE account_id=?) + ? <= ?').bind(account.id,id,mime,bytes.buffer,Date.now(),account.id,bytes.length,PHOTO_QUOTA).run();
+      const result=await db.prepare('INSERT INTO photos(account_id,id,mime,bytes,created_at) SELECT ?,?,?,?,? WHERE (SELECT COALESCE(SUM(length(bytes)),0) FROM photos WHERE account_id=?) + ? <= ?').bind(ownerId,id,mime,bytes.buffer,Date.now(),ownerId,bytes.length,PHOTO_QUOTA).run();
       if(!result.meta.changes)fail(413,'Účet má zaplněný prostor pro fotografie (40 MB).');
       return json({ok:true},201);
     }
