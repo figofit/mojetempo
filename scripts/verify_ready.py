@@ -48,7 +48,7 @@ with sync_playwright() as p:
                     status=page.request.get(base.rstrip('/')+'/api/status',timeout=10000)
                     if status.status!=200 or status.json().get('available') is not True:raise AssertionError('Production D1 binding is not available')
                     session=page.request.get(base.rstrip('/')+'/api/session',timeout=10000)
-                    if session.status!=200 or session.json()!={'user':None}:raise AssertionError('Production D1 account schema is not ready')
+                    if session.status!=200 or session.json()!={'user':None,'diary':None,'diaries':[]}:raise AssertionError('Production D1 account schema is not ready')
                 print('Published Moje tempo opens and initializes in Chromium. Release '+expected_version,flush=True)
                 print('::notice title=Verified application release::'+hostname+' '+expected_version,flush=True)
                 break
