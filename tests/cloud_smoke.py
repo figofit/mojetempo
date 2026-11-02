@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='tempo-cloud-test-') as temporary:
             for attempt in range(120):
                 try:
                     with urlopen(base+'/api/session',timeout=1) as response:
-                        assert json.load(response)=={'user':None}
+                        assert json.load(response)=={'user':None,'diary':None,'diaries':[]}
                     break
                 except (URLError,HTTPError,AssertionError):
                     if process.poll() is not None or attempt==119:
