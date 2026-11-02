@@ -66,6 +66,8 @@ with tempfile.TemporaryDirectory(prefix='tempo-invitation-smoke-') as temporary:
                 check('new personal account receives exactly one correctly dated chronicle moment',len(diary['entries'])==1 and diary['entries'][0]['date']=='2026-10-08' and diary['entries'][0]['type']=='moment' and diary['entries'][0]['duration']==0 and diary['settings']['name']=='Testovací profil')
                 check('acceptance clears the private token and fits phone width',phone.url.endswith('#chronicle') and phone.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                 pc.goto(base)
+                # Direct storage calls must start after the app has read its initial session.
+                pc.locator('#main-nav .nav-item').first.wait_for(state='visible')
                 pc.evaluate('async arg=>{const s=await import("./storage.mjs");await s.authenticate("login",arg);await s.syncCloud();}',{'login':login,'password':password})
                 remote=pc.evaluate('async()=> (await import("./storage.mjs")).loadState()')
                 check('the same account sees the personal milestone on a second device',remote==diary)
@@ -73,6 +75,7 @@ with tempfile.TemporaryDirectory(prefix='tempo-invitation-smoke-') as temporary:
                 phone.locator('.invitation-panel').get_by_text('Milník už byl vložený do tohoto účtu.').wait_for()
                 check('reopening the invitation does not duplicate the moment',len(phone.evaluate('async()=> (await import("./storage.mjs")).loadState()')['entries'])==1)
                 stranger.goto(base)
+                stranger.locator('#main-nav .nav-item').first.wait_for(state='visible')
                 stranger.evaluate('async arg=>{const s=await import("./storage.mjs");await s.authenticate("register",arg);}',{'login':f'stranger-{uuid.uuid4().hex}@example.test','password':password})
                 stranger.goto(link)
                 stranger.locator('.invitation-panel').get_by_text('Tato pozvánka už byla použitá.',exact=False).wait_for()
