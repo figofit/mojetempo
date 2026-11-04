@@ -1,6 +1,6 @@
 // Shared, optional details used by both the personal Olda app and Moje IT FIT.
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null,trainingRoutine:[],trainingSkips:[],jointTrainingAnchor:null});
+export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null,trainingRoutine:[],trainingSkips:[],jointTrainingAnchor:null,weeklyCardio:null});
 const text=(value,max)=>typeof value==='string'&&value.length<=max;
 export function personalSettings(input={}) {
   const output={};
@@ -32,6 +32,9 @@ export function personalSettings(input={}) {
   output.jointTrainingAnchor=anchor?{entryId:anchor.entryId,number:anchor.number}:null;
   const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='1900-01-01'&&Number.isFinite(Date.parse(value+'T12:00:00Z'))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;
   const routineId=value=>typeof value==='string'&&/^routine-[A-Za-z0-9-]{1,60}$/.test(value);
+  const cardio=input.weeklyCardio??null;
+  if(cardio!==null&&(!cardio||!Number.isInteger(cardio.target)||cardio.target<1||cardio.target>7||!text(cardio.label,80)||!cardio.label.trim()||!validDate(cardio.since)))throw new Error('Týdenní kardio potřebuje název, cíl 1 až 7 aktivit a začátek.');
+  output.weeklyCardio=cardio?{target:cardio.target,label:cardio.label.trim(),since:cardio.since}:null;
   const routine=input.trainingRoutine??[],skips=input.trainingSkips??[];
   if(!Array.isArray(routine)||routine.length>14||!Array.isArray(skips)||skips.length>4000)throw new Error('Neplatný tréninkový rytmus.');
   const routineIds=new Set(),routineDays=new Set();

@@ -10,7 +10,7 @@ import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
 import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
-import {renderTrainingRoutine,answerTraining,trainingRoutineWeek} from './training-routine.mjs';
+import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio} from './training-routine.mjs';
 
 const originalOlda=window.ITFIT_ORIGINAL||null;
 const appearance=originalOlda?{title:'Olda 4.0 · ITFIT',id:'original-olda'}:siteAppearance(location.href);
@@ -71,7 +71,7 @@ let renderedAccountRole,renderedDate;
 let habitsOpen=false;
 let habitJournalDate=localDate();
 let planReference=new Date();
-let routineReference=new Date(),routineSaving=false;
+let routineReference=new Date(),routineSaving=false,cardioDate='';
 let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const syncChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('moje-tempo-updates') : null;
@@ -284,7 +284,7 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
   if(allowed&&(currentView==='stats'||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings));
   renderAccountStatus();
@@ -668,9 +668,21 @@ async function importBackup(file) {
 
 async function action(name,element) {
   if(originalOlda&&['routine-prev','routine-next','routine-today'].includes(name)){
+    cardioDate='';
     if(name==='routine-today')routineReference=new Date();
     else {routineReference=new Date(routineReference);routineReference.setDate(routineReference.getDate()+(name==='routine-prev'?-7:7));}
     render();return;
+  }
+  if(originalOlda&&name==='cardio-answer'){
+    if(routineSaving)return;
+    routineSaving=true;const panel=element.closest('.cardio-routine'),date=$('#cardio-date')?.value||'';
+    panel?.querySelectorAll('button').forEach(button=>button.disabled=true);
+    try{
+      const completed=element.dataset.cardioComplete==='true';
+      await persist(current=>answerCardio(current,element.dataset.cardioWeek,Number(element.dataset.cardioIndex),completed,date));
+      render();notify(completed?'Kardio je zapsané. Počítá se zvlášť od posilování.':'Splnění kardia je zrušené.');
+    }finally{routineSaving=false;if(panel?.isConnected)render();}
+    return;
   }
   if(originalOlda&&name==='routine-answer'){
     if(routineSaving)return;
@@ -751,6 +763,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('toggle',event=>{if(event.target.matches?.('.today-habits'))habitsOpen=event.target.open;},true);
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1)));
 document.addEventListener('change',async event=>{
+  if(originalOlda&&event.target.id==='cardio-date'){cardioDate=event.target.value;render();return;}
   const el=event.target;
   if(el.id==='habit-log-date'){habitJournalDate=el.value||localDate();if(habitJournalDate>localDate())habitJournalDate=localDate();render();return;}
   if(el.dataset.habit) {

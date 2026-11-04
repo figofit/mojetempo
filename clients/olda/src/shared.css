@@ -87,6 +87,15 @@ select option{color:#edf2e4;background:#182111}
 .training-routine .routine-edit .button{min-height:44px}
 body:not(.olda-editing) .training-routine .routine-edit{display:none}
 body.olda-editing .routine-read-hint{display:none}
+.cardio-routine .cardio-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cardio-routine .cardio-date{align-items:center;gap:18px;margin:0 0 18px;flex-wrap:wrap}
+.cardio-routine .cardio-date .form-field{margin:0;flex:0 1 200px}
+.cardio-routine .cardio-date input{font-size:16px;min-height:46px}
+.cardio-routine .cardio-date p{flex:1 1 220px}
+.cardio-routine .cardio-check{min-height:48px;gap:10px;font-size:13px;display:inline-flex;align-items:center}
+.cardio-routine .cardio-check span{font-size:24px;line-height:1}
+.cardio-routine .cardio-check[aria-checked=true]{background:var(--lime);color:#243112}
+@media(max-width:540px){.cardio-routine .cardio-slots{grid-template-columns:1fr}.cardio-routine .cardio-check{width:100%;justify-content:center}.cardio-routine .cardio-date .form-field{flex-basis:100%}}
 @media(max-width:700px){.training-routine .routine-slots{grid-template-columns:1fr}.training-routine{padding:18px}.training-routine .panel-header{gap:14px}.training-routine .routine-navigation{width:100%;justify-content:space-between}.training-routine .routine-edit>.button{flex:1}}
 @media(max-width:540px){
   .sidebar{padding:12px 15px}.main-wrap{padding:0 15px 26px}
