@@ -179,9 +179,9 @@ def main() -> int:
                     context.set_offline(False)
                     page.wait_for_function("navigator.onLine && !document.querySelector('#pwa-status').textContent.trim()")
 
-                    page.locator('[data-action="add"]').first.click()
+                    page.get_by_role('button',name='Přidat speciální moment',exact=True).click()
                     page.locator('#entry-form [name="title"]').fill("Rozepsáno před aktualizací")
-                    page.locator('#entry-form [name="duration"]').fill("25")
+                    page.locator('#entry-form [name="note"]').fill("Nepotvrzená vzpomínka před aktualizací")
                     token = page.evaluate("() => window.__tempoSmokeDocument = crypto.randomUUID()")
 
                     # Build a second real production version from copied sources. The
@@ -208,7 +208,7 @@ def main() -> int:
                     # click through the real app handler to exercise its explicit guard.
                     page.evaluate("document.querySelector('[data-action=update-app]').click()")
                     page.wait_for_function("document.querySelector('#toast').textContent.includes('rozepsaný formulář')")
-                    check("explicit update is blocked while a dialog is open", page.evaluate("window.__tempoSmokeDocument") == token and page.locator('#entry-dialog').is_visible() and page.locator('#entry-form [name="title"]').input_value() == "Rozepsáno před aktualizací" and page.evaluate("async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)"))
+                    check("explicit update is blocked while a dialog is open", page.evaluate("window.__tempoSmokeDocument") == token and page.locator('#entry-dialog').is_visible() and page.locator('#entry-type').input_value() == 'moment' and page.locator('#entry-form [name="title"]').input_value() == "Rozepsáno před aktualizací" and page.locator('#entry-form [name="note"]').input_value() == "Nepotvrzená vzpomínka před aktualizací" and page.evaluate("async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)"))
                     page.locator('[data-action="close-entry"]').first.click()
                     page.evaluate("location.hash='plan'")
                     page.locator('#plan-form [name="label"]').fill('Rozepsaný osobní plán')
