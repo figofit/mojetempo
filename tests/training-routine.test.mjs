@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {emptyDiary,mergeDiaries} from '../sync-rules.mjs';
 import {personalSettings} from '../personal.mjs';
 import {answerTraining,trainingRoutineWeek,renderTrainingRoutine} from '../training-routine.mjs';
-import {computeTrainingStats,validateEntry} from '../domain.mjs';
+import {computeTrainingStats,validateEntry,jointTrainingHistory} from '../domain.mjs';
 
 const today='2026-11-06';
 function fixture(){const state=emptyDiary();state.settings.trainingRoutine=[{id:'routine-mon',weekday:0,label:'Gym A',together:false,since:'2026-11-02'},{id:'routine-wed',weekday:2,label:'With coach',together:true,since:'2026-11-02'},{id:'routine-fri',weekday:4,label:'Gym B',together:false,since:'2026-11-02'}];return state;}
@@ -61,4 +61,40 @@ test('normalization, export/import and independent offline device answers preser
   assert.equal(trainingRoutineWeek(roundtrip,today,today).completed,1);assert.equal(trainingRoutineWeek(roundtrip,today,today).slots[1].status,'missed');
   assert.equal(mergeDiaries(base,local,answerTraining(base,'routine-mon','2026-11-02','yes',today)).entries.length,1);
   const duplicate=fixture();duplicate.settings.trainingRoutine[1].weekday=0;assert.throws(()=>personalSettings(duplicate.settings));
+});
+
+test('a confirmed joint number continues independently from solo workouts and dated statistics',()=>{
+  let state=answerTraining(fixture(),'routine-mon','2026-11-02','yes',today);
+  state=answerTraining(state,'routine-wed','2026-11-04','yes',today);
+  state.settings.jointTrainingAnchor={entryId:state.entries[1].id,number:47};
+  const current=jointTrainingHistory(state.entries,state.settings,new Date(2026,10,6));
+  assert.equal(current.anchored,true);assert.equal(current.count,47);assert.equal(current.recorded,1);
+  assert.equal(trainingRoutineWeek(state,today,today).slots[1].jointOrdinal,47);
+  assert.match(renderTrainingRoutine(state,today,today),/společný trénink #47/);
+  const stats=computeTrainingStats(state.entries,state.settings,new Date(2026,10,6));
+  assert.equal(stats.total,2);assert.equal(stats.together,1);assert.ok(stats.periods.every(p=>p.count===2));
+  state=answerTraining(state,'routine-fri','2026-11-06','yes',today);
+  assert.equal(jointTrainingHistory(state.entries,state.settings,new Date(2026,10,6)).count,47);
+  state=answerTraining(state,'routine-wed','2026-11-11','yes','2026-11-11');
+  assert.equal(jointTrainingHistory(state.entries,state.settings,new Date(2026,10,11)).count,48);
+  assert.equal(trainingRoutineWeek(state,'2026-11-11','2026-11-11').slots[1].jointOrdinal,48);
+});
+
+test('backfilling joint records does not count known history twice and deleting the anchor makes its number unavailable',()=>{
+  const state=answerTraining(fixture(),'routine-wed','2026-11-04','yes',today);
+  state.settings.jointTrainingAnchor={entryId:state.entries[0].id,number:47};
+  state.entries.push(log({id:'older-joint',date:'2026-10-28',type:'strength',together:true}));
+  const result=jointTrainingHistory(state.entries,state.settings,new Date(2026,10,6));
+  assert.equal(result.count,47);assert.equal(result.ordinals.get('older-joint'),46);
+  assert.throws(()=>answerTraining(state,'routine-wed','2026-11-04','no',today),/společné pořadí/);
+  const missing=jointTrainingHistory(state.entries.slice(1),state.settings,new Date(2026,10,6));
+  assert.equal(missing.anchored,false);assert.equal(missing.needsAnchor,true);
+});
+
+test('the joint anchor survives backup and independent device merges and rejects invalid historical numbers',()=>{
+  const base=fixture(),local=structuredClone(base),remote=answerTraining(base,'routine-mon','2026-11-02','yes',today);
+  local.settings.jointTrainingAnchor={entryId:'known-workout',number:47};
+  assert.deepEqual(mergeDiaries(base,local,remote).settings.jointTrainingAnchor,local.settings.jointTrainingAnchor);
+  assert.deepEqual(personalSettings(JSON.parse(JSON.stringify(local.settings))).jointTrainingAnchor,local.settings.jointTrainingAnchor);
+  for(const number of [0,-1,1.5,'47',1000001])assert.throws(()=>personalSettings({...local.settings,jointTrainingAnchor:{entryId:'known-workout',number}}));
 });

@@ -336,6 +336,16 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
 /** A training is a gym or home workout; walks, sport and recovery remain separate activities. */
 export const isTraining = entry => ['strength','home'].includes(entry?.type);
 
+/** Continue a confirmed joint-workout number without inventing dated historical records. */
+export function jointTrainingHistory(entries=[],settings={},date=new Date()) {
+  const today=localDate(date);
+  const records=(Array.isArray(entries)?entries:[]).filter(e=>isTraining(e)&&e.together===true&&parseDate(e.date)&&e.date<=today).sort((a,b)=>a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id)));
+  const anchor=settings.jointTrainingAnchor,index=anchor?records.findIndex(e=>e.id===anchor.entryId):-1;
+  const anchored=index>=0&&Number.isSafeInteger(anchor.number)&&anchor.number>=index+1&&anchor.number<=1000000;
+  const offset=anchored?anchor.number-index-1:0;
+  return {anchored,needsAnchor:!!anchor&&!anchored,count:offset+records.length,recorded:records.length,ordinals:new Map(records.map((e,i)=>[e.id,offset+i+1]))};
+}
+
 /** Calendar windows include today and never average over time before recorded history. */
 export function computeTrainingStats(entries = [], settings = {}, date = new Date()) {
   const today=localDate(date),current=parseDate(today);

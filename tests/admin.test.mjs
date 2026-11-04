@@ -215,14 +215,15 @@ test('personal strength routine and negative answers persist across accounts API
     const current=(await f.request('/api/diary',{user:f.owner})).body;
     const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
     const slot={id:'routine-test',weekday:0,label:'My gym',together:false,since:date};
-    current.state.settings.trainingRoutine=[slot];current.state.settings.trainingSkips=[{id:date+':routine-test',date,slotId:slot.id}];
+    current.state.settings.trainingRoutine=[slot];current.state.settings.trainingSkips=[{id:date+':routine-test',date,slotId:slot.id}];current.state.settings.jointTrainingAnchor={entryId:'known-workout',number:47};
     assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:current})).status,200);
     const legacy=(await f.request('/api/diary',{user:f.owner})).body;
     assert.deepEqual(legacy.state.settings.trainingRoutine,[slot]);assert.equal(legacy.state.entries.length,0);
-    delete legacy.state.settings.trainingRoutine;delete legacy.state.settings.trainingSkips;
+    delete legacy.state.settings.trainingRoutine;delete legacy.state.settings.trainingSkips;delete legacy.state.settings.jointTrainingAnchor;
     assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:legacy})).status,200);
     const restored=(await f.request('/api/diary',{user:f.owner})).body;
     assert.deepEqual(restored.state.settings.trainingSkips,current.state.settings.trainingSkips);
+    assert.deepEqual(restored.state.settings.jointTrainingAnchor,current.state.settings.jointTrainingAnchor);
     restored.state.settings.trainingRoutine[0].weekday=8;
     assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:restored})).status,400);
   }finally{f.sqlite.close();}
