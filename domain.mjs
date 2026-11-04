@@ -333,6 +333,36 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
   };
 }
 
+/** A training is a gym or home workout; walks, sport and recovery remain separate activities. */
+export const isTraining = entry => ['strength','home'].includes(entry?.type);
+
+/** Calendar windows include today and never average over time before recorded history. */
+export function computeTrainingStats(entries = [], settings = {}, date = new Date()) {
+  const today=localDate(date),current=parseDate(today);
+  const training=(Array.isArray(entries)?entries:[]).filter(entry=>isTraining(entry)&&parseDate(entry.date)&&entry.date<=today);
+  const first=training.map(entry=>entry.date).sort()[0]||'';
+  const configured=parseDate(settings.trainingSince)&&settings.trainingSince<=today?settings.trainingSince:'';
+  const historyStart=[first,configured].filter(Boolean).sort()[0]||'';
+  const ordinal=key=>{const [year,month,day]=key.split('-').map(Number);return Date.UTC(year,month-1,day)/86400000;};
+  const periods=[1,6,12].map(months=>{
+    const boundary=new Date(current.getFullYear(),current.getMonth()-months,1,12);
+    boundary.setDate(Math.min(current.getDate(),new Date(boundary.getFullYear(),boundary.getMonth()+1,0).getDate()));
+    const windowStart=localDate(addDays(boundary,1));
+    const start=historyStart?(historyStart>windowStart?historyStart:windowStart):'';
+    const selected=training.filter(entry=>entry.date>=windowStart);
+    const days=start?ordinal(today)-ordinal(start)+1:0;
+    return {months,start,end:today,windowStart,days,count:selected.length,together:selected.filter(entry=>entry.together===true).length,weeklyAverage:days>=7?selected.length*7/days:null};
+  });
+  return {total:training.length,together:training.filter(entry=>entry.together===true).length,historyStart,periods};
+}
+
+/** Large chronicle cards are explicit moments or photos. Routine records stay compact. */
+export function chronicleGroups(entries = []) {
+  const featured=[],routine=[];
+  for(const entry of entries)(entry.type==='moment'||entry.photoId?featured:routine).push(entry);
+  return {featured,routine};
+}
+
 /** Transparent rule-based reflections, not medical or AI-generated advice. */
 export function generateInsights(entries = [], settings = DEFAULT_SETTINGS, date = new Date()) {
   const stats = computeStats(entries, settings, date);

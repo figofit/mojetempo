@@ -1,7 +1,7 @@
 import {emptyDiary} from './sync-rules.mjs';
 import {personalSettings} from './personal.mjs';
 import {habitDefinitions,renderTodayHabits,renderHabitSettings} from './habits.mjs';
-import {localDate} from './domain.mjs';
+import {localDate,isTraining,computeTrainingStats,ACTIVITY_TYPES} from './domain.mjs';
 const original=window.OldaOriginal;
 // Presentation is deployment-owned. The public source contains only a template.
 try {
@@ -18,14 +18,15 @@ function projection(state) {
     if(entry.steps)day(entry.date).steps=(day(entry.date).steps||0)+entry.steps;
     if(entry.type==='day'){const d=day(entry.date);d.energy=entry.energy??null;d.note=entry.note;}
   }
-  const sessions=state.entries.filter(e=>!['moment','day','steps'].includes(e.type)).map(e=>({id:e.id,date:e.date,title:e.title||e.type,category:e.type==='strength'?'strength':e.type==='mobility'?'mobility':['walking','hiking'].includes(e.type)?'walk':['cardio','cycling'].includes(e.type)?'cardio':'other',minutes:e.duration,together:e.together===true,note:e.note,exercises:(e.workout?.exercises||e.exerciseDetails||[]).map(x=>({name:x.name,sets:x.sets,reps:x.reps??0,weight:x.weight??0}))}));
-  return {...original.seed,profile:{...original.profile,...(personal.personalProfile||{}),startDate:state.settings.trainingSince||''},plan:{...personal.personalPlan,title:personal.personalPlan.title||original.seed.plan.title},sessions,days:[...days.values()],habits:habitDefinitions(state.settings).map(h=>({id:h.id,name:h.label,note:h.description,target:h.target||7,archived:h.archived||!state.settings.habits.includes(h.id)})),milestones:state.entries.filter(e=>e.type==='moment').map(e=>({id:e.id,date:e.date,title:e.title,note:e.note}))};
+  const sessions=state.entries.filter(e=>!['moment','day','steps'].includes(e.type)&&state.settings.modules.includes(ACTIVITY_TYPES.find(type=>type.id===e.type)?.category)).map(e=>({id:e.id,date:e.date,type:e.type,title:e.title||ACTIVITY_TYPES.find(type=>type.id===e.type)?.label||e.type,category:e.type==='strength'?'strength':e.type==='mobility'?'mobility':['walking','hiking'].includes(e.type)?'walk':['cardio','cycling'].includes(e.type)?'cardio':'other',minutes:e.duration,together:e.together===true,note:e.note,exercises:(e.workout?.exercises||e.exerciseDetails||[]).map(x=>({name:x.name,sets:x.sets,reps:x.reps??0,weight:x.weight??0}))}));
+  return {...original.seed,profile:{...original.profile,...(personal.personalProfile||{}),startDate:state.settings.trainingSince||''},plan:{...personal.personalPlan,title:personal.personalPlan.title||original.seed.plan.title},sessions,trainingSessions:sessions.filter(isTraining),completedTogether:computeTrainingStats(state.entries,state.settings).together,days:[...days.values()],habits:habitDefinitions(state.settings).map(h=>({id:h.id,name:h.label,note:h.description,target:h.target||7,archived:h.archived||!state.settings.habits.includes(h.id)})),milestones:state.entries.filter(e=>e.type==='moment').map(e=>({id:e.id,date:e.date,title:e.title,note:e.note}))};
 }
 window.ITFIT_ORIGINAL={
   routes,labels:{overview:'Přehled',diary:'Tréninky a aktivity',plan:'Tvůj plán',chronicle:'Kronika',stats:'Pokrok',modules:'Návyky a moduly'},
-  overview(state,account) {
+  overview(state,account,summary='') {
     const allowed=!!account.diary;
-    const body=original.home(projection(allowed?state:emptyDiary()));
+    let body=original.home(projection(allowed?state:emptyDiary()));
+    if(allowed&&summary)body=body.replace(/<div class="stats">[\s\S]*?<\/div><div class="grid">/,summary+'<div class="grid">');
     const intro=allowed?'':`<section class="card private-entry"><h2>Tvůj osobní deník.</h2><p>Oldo, přihlas se svým účtem Moje IT FIT. Tvoje zápisy uvidíš tady i v Moje IT FIT.</p>${account.user?'<p>Tento účet nemá přístup k Oldovu deníku.</p><button class="button ghost" data-action="logout-account">Odhlásit tento účet</button>':'<button class="button primary" data-action="open-account">Přihlásit se</button>'}</section>`;
     return body.replace('</section><div class="stats">',`</section>${intro}<div class="stats">`);
   }
@@ -40,4 +41,17 @@ document.addEventListener('click',event=>{
     entry.setAttribute('aria-label',document.body.classList.contains('olda-editing')?'Ukončit společný zápis':'Otevřít společný zápis');
   }
 });
+const sidebar=document.querySelector('.sidebar');
+const menuButton=document.createElement('button');
+menuButton.id='olda-menu-toggle';menuButton.type='button';menuButton.className='small-btn';
+menuButton.setAttribute('aria-expanded','false');menuButton.setAttribute('aria-controls','olda-navigation');
+menuButton.innerHTML='<span aria-hidden="true">☰</span> Menu';
+const navigation=document.createElement('div');navigation.id='olda-navigation';
+navigation.append(document.querySelector('#main-nav'),document.querySelector('.sidebar-bottom'));
+sidebar.append(menuButton,navigation);
+function closeMenu(){sidebar.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');}
+menuButton.addEventListener('click',()=>{const opened=sidebar.classList.toggle('menu-open');menuButton.setAttribute('aria-expanded',String(opened));});
+navigation.addEventListener('click',event=>{if(event.target.closest('a,button[data-view]'))closeMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&sidebar.classList.contains('menu-open')){closeMenu();menuButton.focus();}});
+window.addEventListener('hashchange',closeMenu);
 await import('./tempo-app.js');

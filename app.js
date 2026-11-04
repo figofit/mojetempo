@@ -1,5 +1,5 @@
 import {siteAppearance,applyAppearance,renderOldaWelcome,renderOldaGift} from './appearance.mjs';
-import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, workoutLabel, localDate, validateEntry, computeStats, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
+import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, workoutLabel, localDate, validateEntry, computeStats, computeTrainingStats, chronicleGroups, isTraining, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
 import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
 import {MOBILITY_EXERCISES,mobilityExerciseNames} from './mobility-catalog.mjs';
 import {scheduleSettings,activeRest,trainingAge,endRest} from './schedule-rules.mjs';
@@ -121,7 +121,7 @@ function activityRow(entry, removable = false) {
   if (!type) return '';
   const amount=entry.type==='steps'?`${number(entry.steps)}<small> kroků</small>`:['moment','day'].includes(entry.type)?(entry.type==='day'?'Den':'Moment'):entry.durationUnknown?'Bez času':`${number(entry.duration)}<small> min</small>`;
   const category={movement:'Pohyb',recovery:'Regenerace',steps:'Kroky',chronicle:'Kronika'}[type.category];
-  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.workout?renderWorkoutDetails(entry.workout):''}${renderMobilityDetails(entry)}${entry.together?'<small class="personal-detail">Spolu s Michalem</small>':''}${entry.energy!=null?'<small class="personal-detail">Energie '+entry.energy+' / 5</small>':''}${Object.entries(entry.values||{}).map(([key,value])=>{const field=state.settings.personalFields?.find(f=>f.id===key);return '<small class="personal-detail">'+esc(field?.name||key)+': '+esc(typeof value==='boolean'?(value?'Ano':'Ne'):value)+' '+esc(field?.unit||'')+'</small>';}).join('')}${entry.exerciseDetails?.length?'<details class="workout-details"><summary>Cviky</summary>'+entry.exerciseDetails.map(e=>'<p>'+esc(e.name)+' · '+e.sets+' × '+e.reps+' · '+e.weight+' kg</p>').join('')+'</details>':''}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
+  return `<div class="activity-row"><span class="activity-icon" style="color:${type.color}">${icon(type.icon)}</span><div class="activity-main"><strong class="activity-title">${esc(entry.title || type.label)}</strong><span class="activity-subtitle">${esc(type.label)} <span aria-hidden="true">·</span> ${dateText(entry.date,{month:'short'})}${entry.steps&&entry.type!=='steps'&&moduleOn('steps')?` · ${number(entry.steps)} kroků`:''}${entry.distance?` · ${number(entry.distance)} km`:''}${entry.elevation?` · ↑ ${number(entry.elevation)} m`:''}${entry.location?` · ${esc(entry.location.name)}`:''}</span>${entry.note?'<p class="activity-note">'+esc(entry.note)+'</p>':''}${entry.workout?renderWorkoutDetails(entry.workout):''}${renderMobilityDetails(entry)}${entry.together?'<small class="personal-detail">Spolu s Michalem</small>':''}${entry.energy!=null?'<small class="personal-detail">Energie '+entry.energy+' / 5</small>':''}${Object.entries(entry.values||{}).map(([key,value])=>{const field=state.settings.personalFields?.find(f=>f.id===key);return '<small class="personal-detail">'+esc(field?.name||key)+': '+esc(typeof value==='boolean'?(value?'Ano':'Ne'):value)+' '+esc(field?.unit||'')+'</small>';}).join('')}${entry.exerciseDetails?.length?'<details class="workout-details"><summary>Cviky</summary>'+entry.exerciseDetails.map(e=>'<p>'+esc(e.name)+' · '+e.sets+' × '+e.reps+' · '+e.weight+' kg</p>').join('')+'</details>':''}</div><div class="activity-right"><strong class="activity-duration">${amount}</strong><span class="tag">${category}</span></div>${removable?`<button class="icon-button" data-action="edit" data-id="${esc(entry.id)}" aria-label="Upravit aktivitu ${esc(entry.title || type.label)}">✎</button><button class="icon-button" data-action="delete" data-id="${esc(entry.id)}" aria-label="Smazat aktivitu ${esc(entry.title || type.label)}">${icon('trash')}</button>`:''}</div>`;
 }
 
 function renderMobilityDetails(entry) {
@@ -149,7 +149,7 @@ function renderToday() {
   const today=localDate(), daily=visibleEntries().filter(entry=>entry.date===today);
   const minutes=daily.filter(entry=>typeById(entry.type).category==='movement').reduce((sum,entry)=>sum+entry.duration,0);
   const quick=[['strength','Fitko','dumbbell'],['cycling','Kolo','bike'],['walking','Procházka','footprints'],['hiking','Výšlap','mountain'],['mobility','Mobilita / protažení','sparkles'],['cardio','Bazén / kardio','heart']].filter(([type])=>moduleOn(typeById(type).category));
-  return `<section class="panel today-panel"><div class="panel-header"><div><span class="eyebrow">MALÝ ZÁPIS, VELKÝ ROZDÍL</span><h2 class="panel-title">Dnes</h2><p class="panel-subtitle">${daily.length?`${daily.length} zápisů${moduleOn('movement')?` · ${minutes} minut pohybu`:''}`:'Jaký bude tvůj dnešní malý krok?'}</p></div><span class="tag">${dateText(today,{month:'short'})}</span></div><div class="today-actions">${quick.map(([type,label,symbol])=>`<button class="button secondary small" data-action="quick-entry" data-type="${type}" ${label==='Mobilita / protažení'?'data-title="Mobilita / protažení"':label==='Bazén / kardio'?'data-title="Bazén / kardio"':''}>${icon(symbol)}${label}</button>`).join('')}${moduleOn('steps')?`<button class="button ghost small" data-action="yesterday-steps">${icon('footprints')}Doplnit včerejší kroky</button>`:''}</div>${daily.length?`<div class="today-records">${daily.slice(0,4).map(entry=>`<button class="today-record" data-action="${demo?'quick-entry':'edit'}" data-type="${entry.type}" data-id="${esc(entry.id)}">${icon('check')}<span>${esc(entry.title||typeById(entry.type).label)}</span><small>${entry.type==='steps'?`${number(entry.steps)} kroků`:entry.duration?`${entry.duration} min`:'moment'}</small></button>`).join('')}</div>`:''}${renderTodayHabits(state.settings,localDate(),habitsOpen)}</section>${renderTodayPlan(state.settings)}`;
+  return `<section class="panel today-panel"><div class="panel-header"><div><span class="eyebrow">MALÝ ZÁPIS, VELKÝ ROZDÍL</span><h2 class="panel-title">Dnes</h2><p class="panel-subtitle">${daily.length?`${daily.length} zápisů${moduleOn('movement')?` · ${minutes} minut pohybu`:''}`:'Jaký bude tvůj dnešní malý krok?'}</p></div><span class="tag">${dateText(today,{month:'short'})}</span></div><div class="today-actions">${quick.map(([type,label,symbol])=>`<button class="button secondary small" data-action="quick-entry" data-type="${type}" ${label==='Mobilita / protažení'?'data-title="Mobilita / protažení"':label==='Bazén / kardio'?'data-title="Bazén / kardio"':''}>${icon(symbol)}${label}</button>`).join('')}${moduleOn('steps')?`<button class="button ghost small" data-action="yesterday-steps">${icon('footprints')}Doplnit včerejší kroky</button>`:''}</div>${daily.length?`<div class="today-records">${daily.slice(0,4).map(entry=>`<button class="today-record" data-action="${demo?'quick-entry':'edit'}" data-type="${entry.type}" data-id="${esc(entry.id)}">${icon('check')}<span>${esc(entry.title||typeById(entry.type).label)}</span><small>${entry.type==='steps'?`${number(entry.steps)} kroků`:entry.duration?`${entry.duration} min`:entry.durationUnknown&&!['moment','day'].includes(entry.type)?'bez měření času':entry.type==='day'?'denní zápis':'moment'}</small></button>`).join('')}</div>`:''}${renderTodayHabits(state.settings,localDate(),habitsOpen)}</section>${renderTodayPlan(state.settings)}`;
 }
 
 function renderPlan() {
@@ -194,7 +194,16 @@ function renderDiary(stats) {
 
 function renderChronicle(stats) {
   if (!moduleOn('chronicle')) return `${heading('Moje kronika','Vzpomínky na tvoji cestu.','<button class="button secondary" data-view="modules">Zapnout modul</button>')}${empty('Kronika je právě vypnutá.',false)}`;
-  return `${heading('Každý moment má svůj příběh.', 'Fotky, myšlenky a malá vítězství. Tvoje osobní kronika.')}<div class="timeline">${stats.recentEntries.length?stats.recentEntries.map(entry=>{const type=typeById(entry.type);return `<article class="timeline-card"><div class="timeline-date">${dateText(entry.date,{year:'numeric'})}</div>${entry.photoId&&!demo?`<img class="timeline-photo" data-photo="${esc(entry.photoId)}" alt="Fotografie k aktivitě ${esc(entry.title||type.label)}" />`:demo?`<div class="photo-empty">${icon(type.icon)}<span>${esc(type.label)}</span><small>Ukázkový moment</small></div>`:''}<div class="timeline-body"><span class="tag">${esc(type.label)} · ${entry.type==='steps'?number(entry.steps)+' kroků':entry.duration?entry.duration+' min':'Osobní moment'}</span><h2>${esc(entry.title||type.label)}</h2><p style="white-space:pre-wrap">${esc(entry.note||'I tenhle moment patří do tvého příběhu.')}</p>${renderMobilityDetails(entry)}${entry.mood?`<span class="form-hint">Pocit po aktivitě: ${['','Náročné','Slabší','Dobré','Skvělé','Výborné'][entry.mood]}</span>`:''}</div></article>`;}).join(''):empty('První moment čeká na tebe.')}</div>`;
+  const {featured,routine}=chronicleGroups(stats.recentEntries);
+  return `${heading('Vzpomínky, ke kterým se chceš vracet.', 'Větší místo mají fotografie a speciální momenty. Běžné zápisy zůstávají v krátkém seznamu.','<button class="button primary" data-action="quick-entry" data-type="moment">'+icon('plus')+'Přidat speciální moment</button>')}<div class="timeline">${featured.map(entry=>{const type=typeById(entry.type);return `<article class="timeline-card"><div class="timeline-date">${dateText(entry.date,{year:'numeric'})}</div>${entry.photoId&&!demo?`<img class="timeline-photo" data-photo="${esc(entry.photoId)}" alt="Fotografie k aktivitě ${esc(entry.title||type.label)}" />`:demo?`<div class="photo-empty">${icon(type.icon)}<span>${esc(type.label)}</span><small>Ukázkový moment</small></div>`:''}<div class="timeline-body"><span class="tag">${esc(type.label)}${entry.together?' · Spolu s Michalem':''}</span><h2>${esc(entry.title||type.label)}</h2><p style="white-space:pre-wrap">${esc(entry.note)}</p>${renderMobilityDetails(entry)}${entry.mood?`<span class="form-hint">Pocit po aktivitě: ${['','Náročné','Slabší','Dobré','Skvělé','Výborné'][entry.mood]}</span>`:''}</div></article>`;}).join('')}</div>${!featured.length?'<section class="panel chronicle-empty"><h2 class="panel-title">Místo pro něco speciálního.</h2><p class="panel-subtitle">Fotografie, první úspěch nebo zážitek, který si chceš uchovat.</p></section>':''}${routine.length?`<details class="panel chronicle-routine"><summary>Běžné zápisy <span class="tag">${routine.length}</span></summary><div class="chronicle-rows">${routine.map(entry=>`<article class="chronicle-row"><time datetime="${esc(entry.date)}">${dateText(entry.date,{month:'short',year:'numeric'})}</time><div><strong>${esc(entry.title||typeById(entry.type).label)}</strong><small>${esc(typeById(entry.type).label)}${entry.together?' · Spolu s Michalem':''}</small></div></article>`).join('')}</div><a class="button ghost small" href="#diary">Celý tréninkový deník ${icon('arrow')}</a></details>`:''}`;
+}
+
+function renderTrainingSummary() {
+  const training=computeTrainingStats(entries(),state.settings);
+  const week=computeStats(entries().filter(entry=>entry.date<=localDate()),state.settings);
+  const otherCount=types=>week.typeBreakdown.filter(type=>types.includes(type.id)).reduce((sum,type)=>sum+type.count,0);
+  const average=value=>value==null?'—':value.toLocaleString('cs-CZ',{maximumFractionDigits:1});
+  return `<section class="panel training-summary"><div class="panel-header"><div><h2 class="panel-title">Tvůj tréninkový rytmus</h2><p class="panel-subtitle">Posilování společně i samostatně. Každý zapsaný trénink se počítá jednou.</p></div>${icon('dumbbell')}</div><div class="training-totals"><div><span>Tréninků celkem</span><strong>${number(training.total)}</strong></div><div><span>Z toho spolu s Michalem</span><strong>${number(training.together)}</strong></div></div><div class="training-periods">${training.periods.map(period=>`<article class="training-period"><h3>${{1:'Poslední měsíc',6:'Poslední půlrok',12:'Poslední rok'}[period.months]}</h3><div class="training-average">${average(period.weeklyAverage)}<span>průměr za týden</span></div><p>${period.count} celkem · ${period.together} spolu</p><small>${period.days?`${dateText(period.start,{month:'short',year:'numeric'})} – ${dateText(period.end,{month:'short',year:'numeric'})}`:'Zatím bez zapsané historie'}</small></article>`).join('')}</div><p class="form-hint">Počítáme pouze posilovnu a domácí posilování. Průměr vychází ze zapsaných tréninků a délky evidence v daném období. U kratší historie počítáme až od jejího začátku. Průměr se zobrazí po prvním týdnu evidence.</p><div class="other-movement"><h3>Další pohyb · tento týden</h3><div><span>Kolo a kardio</span><strong>${otherCount(['cycling','cardio'])}</strong></div><div><span>Chůze a výšlapy</span><strong>${otherCount(['walking','hiking'])}</strong></div></div></section>`;
 }
 
 function renderStats(stats) {
@@ -273,7 +282,8 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount())+(allowed?renderToday():''):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
+  if(allowed&&(currentView==='stats'||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings));
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
@@ -320,6 +330,8 @@ async function openEntry(id=null, preset={}) {
   const available=ACTIVITY_TYPES.filter(type=>moduleOn(type.category));
   if(!available.length) {location.hash='modules';notify('Zapni nejprve alespoň jeden modul.');return;}
   $('#entry-form').reset();
+  $('#entry-form').elements.durationUnknown.checked=!!originalOlda;
+  $('#strength-fields .exercise-library').open=!originalOlda;
   $('#personal-entry-fields').innerHTML=personalSettings(state.settings).personalFields.map(f=>`<label class="form-field">${esc(f.name)} ${esc(f.unit)}${f.type==='boolean'?`<select data-personal-value="${f.id}"><option value="">Bez údaje</option><option value="true">Ano</option><option value="false">Ne</option></select>`:`<input data-personal-value="${f.id}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':'maxlength="1000"'}>`}</label>`).join('');
   $('#workout-focus').innerHTML=WORKOUT_FOCUSES.map(focus=>`<option value="${focus.id}">${esc(focus.label)}</option>`).join('');
   $('#workout-exercises').replaceChildren();
@@ -357,6 +369,7 @@ async function openEntry(id=null, preset={}) {
   $('#custom-exercise-pattern').innerHTML=MOVEMENT_PATTERNS.map(pattern=>`<option value="${pattern.id}">${esc(pattern.label)}</option>`).join('');
   renderExerciseLibrary();
   syncEntryFields();
+  syncEntryDetails();
   $('#photo-preview').classList.add('hidden');
   $('#photo-label').textContent='Přidat fotku k tomuhle momentu';
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
@@ -372,9 +385,17 @@ function syncEntryFields() {
   $('#entry-form [name="steps"]').required=type==='steps';
   $('#entry-steps-field').classList.toggle('hidden',!moduleOn('steps')||type==='moment');
   $('#entry-chronicle-fields').classList.toggle('hidden',!moduleOn('chronicle'));
+  // Existing saved places remain editable; a new gym entry needs no map controls.
+  $('#entry-place-fields').classList.toggle('hidden',['strength','home'].includes(type)&&!$('#place-latitude').value&&!$('#place-longitude').value&&!$('#place-query').value.trim());
   for(const field of ['distance','elevation'])$('#entry-'+field+'-field').classList.toggle('hidden',!['hiking','walking','cycling','cardio'].includes(type));
   $('#mobility-fields').classList.toggle('hidden',type!=='mobility');$('#mobility-fields').disabled=type!=='mobility';
   syncWorkoutFields();
+}
+
+function syncEntryDetails() {
+  const previous=state.entries.find(entry=>entry.id===editingEntryId);
+  const hasDetails=previous&&(previous.workout||previous.photoId||previous.location||previous.title||previous.energy!=null||previous.duration>0||previous.steps||Object.keys(previous.values||{}).length||previous.exerciseDetails?.length);
+  $('#entry-details').open=!originalOlda||!isTraining({type:$('#entry-type').value})||$('#entry-form').elements.together.checked||!!hasDetails;
 }
 
 function syncWorkoutFields() {
@@ -769,10 +790,16 @@ document.addEventListener('submit',async event=>{
   } catch(error) {notify(error.message,true);}
 });
 $('#entry-form').addEventListener('submit',submitEntry);
-$('#entry-type').addEventListener('change',syncEntryFields);
+$('#entry-type').addEventListener('change',()=>{syncEntryFields();syncEntryDetails();});
+$('#entry-form [name="together"]').addEventListener('change',syncEntryDetails);
 $('#entry-form [name="durationUnknown"]').addEventListener('change',syncEntryFields);
 $('#workout-focus').addEventListener('change',syncWorkoutFields);
 $('#entry-date').addEventListener('change',renderExerciseLibrary);
+document.addEventListener('click',event=>{
+  const input=event.target.closest('.form-field')?.querySelector('input[type="date"]');
+  if(!input||input.disabled||input.readOnly)return;
+  try {if(typeof input.showPicker==='function')input.showPicker();else input.focus();}catch{input.focus();}
+});
 $('#exercise-search').addEventListener('input',event=>{exerciseQuery=event.target.value;renderExerciseLibrary();});
 document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
 $('#place-query').addEventListener('input',()=>{placeSearchRevision++;$('#place-results').replaceChildren();$('#place-status').textContent='';$('#place-latitude').value='';$('#place-longitude').value='';});
