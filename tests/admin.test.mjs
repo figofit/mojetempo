@@ -209,6 +209,25 @@ test('account writes preserve weekly plans and completion checks with independen
   }finally{f.sqlite.close();}
 });
 
+test('personal strength routine and negative answers persist across accounts API reads and older clients',async()=>{
+  const f=await fixture();
+  try{
+    const current=(await f.request('/api/diary',{user:f.owner})).body;
+    const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
+    const slot={id:'routine-test',weekday:0,label:'My gym',together:false,since:date};
+    current.state.settings.trainingRoutine=[slot];current.state.settings.trainingSkips=[{id:date+':routine-test',date,slotId:slot.id}];
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:current})).status,200);
+    const legacy=(await f.request('/api/diary',{user:f.owner})).body;
+    assert.deepEqual(legacy.state.settings.trainingRoutine,[slot]);assert.equal(legacy.state.entries.length,0);
+    delete legacy.state.settings.trainingRoutine;delete legacy.state.settings.trainingSkips;
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:legacy})).status,200);
+    const restored=(await f.request('/api/diary',{user:f.owner})).body;
+    assert.deepEqual(restored.state.settings.trainingSkips,current.state.settings.trainingSkips);
+    restored.state.settings.trainingRoutine[0].weekday=8;
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:restored})).status,400);
+  }finally{f.sqlite.close();}
+});
+
 test('old installed clients preserve newer optional settings and explicit clearing still works',async()=>{
   const f=await fixture();
   try {

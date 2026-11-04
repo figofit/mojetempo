@@ -10,6 +10,7 @@ import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
 import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
+import {renderTrainingRoutine,answerTraining,trainingRoutineWeek} from './training-routine.mjs';
 
 const originalOlda=window.ITFIT_ORIGINAL||null;
 const appearance=originalOlda?{title:'Olda 4.0 · ITFIT',id:'original-olda'}:siteAppearance(location.href);
@@ -70,6 +71,7 @@ let renderedAccountRole,renderedDate;
 let habitsOpen=false;
 let habitJournalDate=localDate();
 let planReference=new Date();
+let routineReference=new Date(),routineSaving=false;
 let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const syncChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('moje-tempo-updates') : null;
@@ -282,7 +284,7 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
   if(allowed&&(currentView==='stats'||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings));
   renderAccountStatus();
@@ -665,6 +667,22 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(originalOlda&&['routine-prev','routine-next','routine-today'].includes(name)){
+    if(name==='routine-today')routineReference=new Date();
+    else {routineReference=new Date(routineReference);routineReference.setDate(routineReference.getDate()+(name==='routine-prev'?-7:7));}
+    render();return;
+  }
+  if(originalOlda&&name==='routine-answer'){
+    if(routineSaving)return;
+    routineSaving=true;
+    const panel=element.closest('.training-routine');panel?.querySelectorAll('button').forEach(button=>button.disabled=true);
+    try{
+      await persist(current=>answerTraining(current,element.dataset.slotId,element.dataset.slotDate,element.dataset.answer));
+      const slot=trainingRoutineWeek(state,element.dataset.slotDate).slots.find(s=>s.id===element.dataset.slotId);
+      render();notify(element.dataset.answer==='yes'?`Splněno. Trénink #${slot.ordinal} je zapsaný.`:element.dataset.answer==='no'?'Vynechání je uložené. Počet tréninků se nezvyšuje.':'Odpověď je zrušená.');
+    }finally{routineSaving=false;if(panel?.isConnected)render();}
+    return;
+  }
   if(name==='personal-plan-add'){$('#personal-plan-rows').insertAdjacentHTML('beforeend',personalPlanRow());return;}
   if(name==='personal-row-remove'){element.closest('.personal-plan-row').remove();return;}
   if(['plan-prev','plan-next','plan-today'].includes(name)){if(name==='plan-today')planReference=new Date();else{planReference=new Date(planReference);planReference.setDate(planReference.getDate()+(name==='plan-prev'?-7:7));}render();return;}

@@ -37,7 +37,7 @@ export function mergeDiaries(base,local,remote) {
   }
   const settings={};
   for(const key of Object.keys(DEFAULT_SETTINGS)) {
-    if(['favoriteExercises','customExercises','weeklyPlan','planChecks','habits','habitChecks','restPeriods','customHabits','personalFields'].includes(key))continue;
+    if(['favoriteExercises','customExercises','weeklyPlan','planChecks','habits','habitChecks','restPeriods','customHabits','personalFields','trainingRoutine','trainingSkips'].includes(key))continue;
     settings[key]=mergeValue(base.settings[key]??DEFAULT_SETTINGS[key],local.settings[key]??DEFAULT_SETTINGS[key],remote.settings[key]??DEFAULT_SETTINGS[key]);
   }
   // Collections merge by identity, so favoriting different exercises on two devices
@@ -56,7 +56,7 @@ export function mergeDiaries(base,local,remote) {
   Object.assign(settings,librarySettings(settings));
   for(const key of ['weeklyPlan','planChecks'])settings[key]=mergeCollection(base.settings[key],local.settings[key],remote.settings[key]);
   Object.assign(settings,planningSettings(settings));
-  for(const key of ['customHabits','personalFields'])settings[key]=mergeCollection(base.settings[key],local.settings[key],remote.settings[key]);
+  for(const key of ['customHabits','personalFields','trainingRoutine','trainingSkips'])settings[key]=mergeCollection(base.settings[key],local.settings[key],remote.settings[key]);
   Object.assign(settings,personalSettings(settings));
   settings.habits=habitDefinitions(settings).filter(habit=>mergeValue((base.settings.habits||[]).includes(habit.id),(local.settings.habits||[]).includes(habit.id),(remote.settings.habits||[]).includes(habit.id))).map(habit=>habit.id);
   settings.habitChecks=mergeCollection(base.settings.habitChecks,local.settings.habitChecks,remote.settings.habitChecks);

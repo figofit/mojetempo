@@ -1,6 +1,6 @@
 // Shared, optional details used by both the personal Olda app and Moje IT FIT.
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null});
+export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null,trainingRoutine:[],trainingSkips:[]});
 const text=(value,max)=>typeof value==='string'&&value.length<=max;
 export function personalSettings(input={}) {
   const output={};
@@ -27,6 +27,20 @@ export function personalSettings(input={}) {
     if(p.vaultUrl&&new URL(p.vaultUrl).protocol!=='https:')throw new Error('Vault potřebuje HTTPS odkaz.');
   }
   output.personalProfile=p?Object.fromEntries(['name','salutation','birthday','age','dedication','signature','vaultUrl'].map(key=>[key,p[key]])):null;
+  const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='1900-01-01'&&Number.isFinite(Date.parse(value+'T12:00:00Z'))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;
+  const routineId=value=>typeof value==='string'&&/^routine-[A-Za-z0-9-]{1,60}$/.test(value);
+  const routine=input.trainingRoutine??[],skips=input.trainingSkips??[];
+  if(!Array.isArray(routine)||routine.length>14||!Array.isArray(skips)||skips.length>4000)throw new Error('Neplatný tréninkový rytmus.');
+  const routineIds=new Set(),routineDays=new Set();
+  output.trainingRoutine=routine.map(slot=>{
+    if(!slot||!routineId(slot.id)||routineIds.has(slot.id)||routineDays.has(slot.weekday)||!Number.isInteger(slot.weekday)||slot.weekday<0||slot.weekday>6||!text(slot.label,80)||!slot.label.trim()||typeof slot.together!=='boolean'||!validDate(slot.since))throw new Error('Tréninkový rytmus potřebuje jedinečný den, název a datum začátku.');
+    routineIds.add(slot.id);routineDays.add(slot.weekday);return {id:slot.id,weekday:slot.weekday,label:slot.label.trim(),together:slot.together,since:slot.since};
+  });
+  const skipIds=new Set();
+  output.trainingSkips=skips.map(skip=>{
+    if(!skip||!routineId(skip.slotId)||!validDate(skip.date)||skip.id!==`${skip.date}:${skip.slotId}`||skipIds.has(skip.id))throw new Error('Neplatné vynechání tréninku.');
+    skipIds.add(skip.id);return {id:skip.id,date:skip.date,slotId:skip.slotId};
+  });
   return output;
 }
 export function personalEntry(input,errors) {

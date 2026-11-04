@@ -27,6 +27,7 @@ PUBLIC_FILES = (
     "app.js",
     "domain.mjs",
     "personal.mjs",
+    "training-routine.mjs",
     "storage.mjs",
     "local-storage.mjs",
     "sync-rules.mjs",
