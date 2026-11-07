@@ -51,6 +51,7 @@
           <label class="form-field">Co se dnes povedlo?<select name="type" id="entry-type" required></select></label>
           <label class="form-field date-field" id="entry-date-field">Datum<input name="date" id="entry-date" type="date" required /></label>
         </div>
+        <label class="form-field hidden" id="entry-week-field"><span><input type="checkbox" name="weekOnly"> Znám jen týden, přesný den doplníme</span><small id="entry-week-range" class="form-hint"></small></label>
         <label class="form-field" id="entry-note-field">Poznámka<textarea name="note" rows="3" maxlength="4000" placeholder="Co si chceš z tréninku zapamatovat?"></textarea></label>
         <details id="entry-details" class="entry-details" open><summary>Další údaje a cviky <span class="form-hint">nepovinné</span></summary>
         <label class="form-field" id="entry-time-unknown-field"><span><input type="checkbox" name="durationUnknown"> Čas neznáme / neměříme</span></label>

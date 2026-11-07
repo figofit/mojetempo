@@ -54,6 +54,7 @@ export function personalSettings(input={}) {
 }
 export function personalEntry(input,errors) {
   const out={};
+  if(input.datePrecision!==undefined){if(input.datePrecision!=='week')errors.push('Neplatná přesnost data.');else out.datePrecision='week';}
   if(input.exerciseDetails!==undefined){
     if(!Array.isArray(input.exerciseDetails)||input.exerciseDetails.length>80)errors.push('Neplatné cviky.');
     else out.exerciseDetails=input.exerciseDetails.map(e=>{

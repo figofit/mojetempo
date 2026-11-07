@@ -14,11 +14,11 @@ function projection(state) {
   const personal=personalSettings(state.settings),days=new Map();
   const day=date=>{if(!days.has(date))days.set(date,{date,habits:[],steps:null,energy:null,note:''});return days.get(date);};
   for(const check of state.settings.habitChecks||[])day(check.date).habits.push(check.habitId);
-  for(const entry of state.entries) {
+  for(const entry of state.entries.filter(e=>e.datePrecision!=='week')) {
     if(entry.steps)day(entry.date).steps=(day(entry.date).steps||0)+entry.steps;
     if(entry.type==='day'){const d=day(entry.date);d.energy=entry.energy??null;d.note=entry.note;}
   }
-  const sessions=state.entries.filter(e=>!['moment','day','steps'].includes(e.type)&&state.settings.modules.includes(ACTIVITY_TYPES.find(type=>type.id===e.type)?.category)).map(e=>({id:e.id,date:e.date,type:e.type,title:e.title||ACTIVITY_TYPES.find(type=>type.id===e.type)?.label||e.type,category:e.type==='strength'?'strength':e.type==='mobility'?'mobility':['walking','hiking'].includes(e.type)?'walk':['cardio','cycling'].includes(e.type)?'cardio':'other',minutes:e.duration,together:e.together===true,note:e.note,exercises:(e.workout?.exercises||e.exerciseDetails||[]).map(x=>({name:x.name,sets:x.sets,reps:x.reps??0,weight:x.weight??0}))}));
+  const sessions=state.entries.filter(e=>e.datePrecision!=='week'&&!['moment','day','steps'].includes(e.type)&&state.settings.modules.includes(ACTIVITY_TYPES.find(type=>type.id===e.type)?.category)).map(e=>({id:e.id,date:e.date,type:e.type,title:e.title||ACTIVITY_TYPES.find(type=>type.id===e.type)?.label||e.type,category:e.type==='strength'?'strength':e.type==='mobility'?'mobility':['walking','hiking'].includes(e.type)?'walk':['cardio','cycling'].includes(e.type)?'cardio':'other',minutes:e.duration,together:e.together===true,note:e.note,exercises:(e.workout?.exercises||e.exerciseDetails||[]).map(x=>({name:x.name,sets:x.sets,reps:x.reps??0,weight:x.weight??0}))}));
   return {...original.seed,profile:{...original.profile,...(personal.personalProfile||{}),startDate:state.settings.trainingSince||''},plan:{...personal.personalPlan,title:personal.personalPlan.title||original.seed.plan.title},sessions,trainingSessions:sessions.filter(isTraining),completedTogether:computeTrainingStats(state.entries,state.settings).together,days:[...days.values()],habits:habitDefinitions(state.settings).map(h=>({id:h.id,name:h.label,note:h.description,target:h.target||7,archived:h.archived||!state.settings.habits.includes(h.id)})),milestones:state.entries.filter(e=>e.type==='moment').map(e=>({id:e.id,date:e.date,title:e.title,note:e.note}))};
 }
 window.ITFIT_ORIGINAL={

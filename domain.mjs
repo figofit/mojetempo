@@ -195,6 +195,7 @@ export function validateEntry(input, today = localDate()) {
   if (!typeById.has(input.type)) errors.push('Vyber druh aktivity.');
   if (!parseDate(date)) errors.push('Zadej platné datum.');
   else if (date > today) errors.push('Deník je pro dokončené aktivity. Datum nemůže být v budoucnosti.');
+  if(input.datePrecision==='week'&&(!['cardio','cycling','tennis','boxing'].includes(input.type)||input.together===true||parseDate(date)?.getDay()!==1))errors.push('Týdenní potvrzení samostatného kardia potřebuje pondělní začátek týdne.');
   if (!Number.isInteger(duration) || duration < (independent ? 0 : 1) || duration > 1440) errors.push(independent ? 'Délka zápisu musí být celé číslo od 0 do 1 440 minut.' : 'Délka aktivity musí být 1 až 1 440 celých minut.');
   if(input.durationUnknown===true&&duration!==0)errors.push('Neznámý čas ponech bez minut.');
   if (!Number.isInteger(steps) || steps < 0 || steps > 200000) errors.push('Kroky musí být celé číslo od 0 do 200 000.');
@@ -303,7 +304,7 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
   const weekSteps = weekEntries.reduce((total, entry) => total + numberOrZero(entry.steps), 0);
 
   function summarizeDay(day) {
-    const dayEntries = validEntries.filter((entry) => entry.date === day);
+    const dayEntries = validEntries.filter((entry) => entry.date === day&&entry.datePrecision!=='week');
     return {
       date: day,
       minutes: dayEntries.filter((entry) => typeById.get(entry.type).category === 'movement').reduce((total, entry) => total + numberOrZero(entry.duration), 0),
@@ -319,13 +320,13 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
     weekMinutes,
     weekSessions: movement.length,
     weekRecovery: recovery.length,
-    todaySteps: validEntries.filter((entry) => entry.date === today).reduce((total, entry) => total + numberOrZero(entry.steps), 0),
+    todaySteps: validEntries.filter((entry) => entry.date === today&&entry.datePrecision!=='week').reduce((total, entry) => total + numberOrZero(entry.steps), 0),
     weekSteps,
     weekHikes: movement.filter(entry => entry.type === 'hiking').length,
     weekDistance: movement.reduce((total, entry) => total + numberOrZero(entry.distance), 0),
     weekElevation: movement.reduce((total, entry) => total + numberOrZero(entry.elevation), 0),
     weekGoalPercent: Math.round((weekMinutes / weeklyTarget) * 100),
-    daysActive: new Set(movement.map((entry) => entry.date)).size,
+    daysActive: new Set(movement.filter(entry=>entry.datePrecision!=='week').map((entry) => entry.date)).size,
     weekDaily: Array.from({ length: 7 }, (_, index) => ({ ...summarizeDay(localDate(addDays(monday, index))), label: weekdays[index] })),
     monthDays: Array.from({ length: daysInMonth }, (_, index) => summarizeDay(localDate(new Date(current.getFullYear(), current.getMonth(), index + 1, 12)))),
     typeBreakdown: ACTIVITY_TYPES.map((type) => {
@@ -340,6 +341,10 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
 export const isTraining = entry => ['strength','home'].includes(entry?.type);
 export const isJointTraining = entry => entry?.together===true&&(ACTIVITY_TYPES.some(type=>type.id===entry.type&&type.category==='movement')||entry.type==='mobility');
 export const isCardio = entry => ['cardio','cycling','tennis','boxing'].includes(entry?.type);
+export function entryDateRange(entry) {
+  const first=parseDate(entry.date);
+  return {start:entry.date,end:entry.datePrecision==='week'&&first?localDate(addDays(first,6)):entry.date,weekly:entry.datePrecision==='week'};
+}
 
 /** Continue a confirmed joint-workout number without inventing dated historical records. */
 export function jointTrainingHistory(entries=[],settings={},date=new Date()) {
@@ -414,7 +419,7 @@ function csvCell(value) {
 
 export function exportCSV(entries = []) {
   const rows = [['Datum', 'Aktivita', 'Název', 'Minuty', 'Kroky', 'Nálada', 'Poznámka', 'Vzdálenost (km)', 'Převýšení (m)', 'Místo', 'Zeměpisná šířka', 'Zeměpisná délka', 'Zaměření tréninku', 'Cviky a pracovní série', 'Cviky mobility']];
-  for (const entry of entries) rows.push([entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '',workoutLabel(entry.workout),workoutExercises(entry.workout),mobilityExerciseNames(entry.mobilityExercises||[]).join(', ')]);
+  for (const entry of entries) rows.push([entry.datePrecision==='week'?'Týden '+entry.date+' – '+entryDateRange(entry).end:entry.date, typeById.get(entry.type)?.label ?? entry.type, entry.title, entry.duration, entry.steps ?? 0, entry.mood ?? '', entry.note, entry.distance ?? 0, entry.elevation ?? 0, entry.location?.name ?? '', entry.location?.latitude ?? '', entry.location?.longitude ?? '',workoutLabel(entry.workout),workoutExercises(entry.workout),mobilityExerciseNames(entry.mobilityExercises||[]).join(', ')]);
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(';')).join('\r\n')}\r\n`;
 }
 
@@ -455,7 +460,7 @@ export function exportICS(entries = []) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Moje tempo//Osobni denik//CS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Moje tempo'];
   for (const entry of entries) {
     const day = parseDate(entry.date);
-    if (!day) continue;
+    if (!day||entry.datePrecision==='week') continue;
     const description = [numberOrZero(entry.duration) > 0 ? `${numberOrZero(entry.duration)} minut` : '', entry.steps ? `${entry.steps} kroků` : '', entry.distance ? `${entry.distance} km` : '', entry.elevation ? `Nastoupáno ${entry.elevation} m` : '', workoutLabel(entry.workout),workoutExercises(entry.workout),mobilityExerciseNames(entry.mobilityExercises||[]).join(', '),entry.note].filter(Boolean).join('\n');
     lines.push(
       'BEGIN:VEVENT',

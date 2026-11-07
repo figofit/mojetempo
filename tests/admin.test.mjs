@@ -257,6 +257,19 @@ test('old installed clients preserve newer optional settings and explicit cleari
   }finally{f.sqlite.close();}
 });
 
+test('the real diary API retains week-only cardio precision rather than silently assigning a day',async()=>{
+  const f=await fixture();
+  try{
+    const current=(await f.request('/api/diary',{user:f.owner})).body;
+    const now=new Date(),monday=new Date(now);monday.setDate(monday.getDate()-(monday.getDay()+6)%7);
+    const date=`${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+    current.state.entries=[{id:'week-only-cardio',date,type:'boxing',duration:0,durationUnknown:true,datePrecision:'week',together:false,title:'Box',note:'',createdAt:new Date().toISOString()}];
+    assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:current})).status,200);
+    const saved=(await f.request('/api/diary',{user:f.owner})).body;assert.equal(saved.state.entries[0].datePrecision,'week');
+    saved.state.entries[0].together=true;assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:saved})).status,400);
+  }finally{f.sqlite.close();}
+});
+
 test('invitation preview requires an unexpired private code and exposes no claim identity',async()=>{
   const f=await fixture();
   try {

@@ -7,8 +7,9 @@ export const isPhysicalActivity=entry=>ACTIVITY_TYPES.some(type=>type.id===entry
 const dayIndex=key=>{const d=calendarDay(key);return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000;};
 const shift=(key,days)=>{const d=calendarDay(key);d.setDate(d.getDate()+days);return localDate(d);};
 export function datedActivities(state,today=localDate()) {
-  return state.entries.filter(e=>isPhysicalActivity(e)&&validateEntry(e,today).valid);
+  return physicalActivities(state,today).filter(e=>e.datePrecision!=='week');
 }
+export function physicalActivities(state,today=localDate()) {return state.entries.filter(e=>isPhysicalActivity(e)&&validateEntry(e,today).valid);}
 
 /** Annual checkpoints plus actual new joint sessions, with no daily interpolation. */
 export function historicalTotals(state,today=localDate()) {
@@ -44,7 +45,7 @@ export function trackingStart(state,today=localDate()) {
 
 export function consistencyWeek(state,reference=new Date(),today=localDate()) {
   const dates=planWeekDates(reference),start=dates[0],end=dates[6],since=trackingStart(state,today);
-  const records=datedActivities(state,today).filter(e=>e.date>=start&&e.date<=end&&e.date>=since);
+  const records=physicalActivities(state,today).filter(e=>e.date>=start&&e.date<=end&&e.date>=since);
   const planned=(state.settings.trainingRoutine||[]).filter(slot=>dates[slot.weekday]>=slot.since);
   const targets={solo:planned.filter(s=>!s.together).length,joint:planned.filter(s=>s.together).length,cardio:state.settings.weeklyCardio&&end>=state.settings.weeklyCardio.since?state.settings.weeklyCardio.target:0};
   const solo=records.filter(e=>isTraining(e)&&e.together!==true).length,joint=records.filter(e=>isTraining(e)&&e.together===true).length,cardio=records.filter(isCardio).length;
@@ -67,9 +68,10 @@ export function consistencySeries(state,today=localDate()) {
 export function monthlyConsistency(state,month=localDate().slice(0,7),today=localDate()) {
   if(!/^\d{4}-\d{2}$/.test(month)||!calendarDay(month+'-01'))throw new Error('Vyber platný měsíc.');
   const first=calendarDay(month+'-01'),last=localDate(new Date(first.getFullYear(),first.getMonth()+1,0,12)),since=trackingStart(state,today),activities=datedActivities(state,today);
+  const weeklyRecords=physicalActivities(state,today).filter(e=>e.datePrecision==='week'&&e.date<=last&&shift(e.date,6)>=month+'-01'&&shift(e.date,6)>=since);
   const records=activities.filter(e=>e.date.startsWith(month)&&e.date>=since),byDay=new Map();
   for(const entry of records){if(!byDay.has(entry.date))byDay.set(entry.date,[]);byDay.get(entry.date).push(entry);}
   const days=[];for(let day=month+'-01';day<=last;day=shift(day,1))days.push({date:day,day:Number(day.slice(-2)),outside:day<since,future:day>today,records:byDay.get(day)||[]});
   const weeks=[];for(let day=planWeekDates(month+'-01')[0];day<=last&&day<=today;day=shift(day,7))if(shift(day,6)>=since)weeks.push(consistencyWeek(state,day,today));
-  return {month,offset:(first.getDay()+6)%7,days,records,weeks,activeDays:byDay.size,activeWeeks:weeks.filter(w=>w.active).length,goalWeeks:weeks.filter(w=>w.goalMet).length,solo:records.filter(e=>e.together!==true).length,joint:records.filter(isJointTraining).length};
+  return {month,offset:(first.getDay()+6)%7,days,records,weeklyRecords,weeks,activeDays:byDay.size,activeWeeks:weeks.filter(w=>w.active).length,goalWeeks:weeks.filter(w=>w.goalMet).length,solo:records.filter(e=>e.together!==true).length,joint:records.filter(isJointTraining).length};
 }
