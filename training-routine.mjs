@@ -1,4 +1,4 @@
-import {isTraining,localDate,validateEntry,jointTrainingHistory} from './domain.mjs';
+import {isTraining,isCardio,localDate,validateEntry,jointTrainingHistory} from './domain.mjs';
 import {personalSettings} from './personal.mjs';
 import {planWeekDates,PLAN_DAYS} from './planning.mjs';
 
@@ -8,6 +8,9 @@ const recordId=(slot,date)=>`${slot.id}-${date}`;
 const checkId=(slot,date)=>`${date}:${slot.id}`;
 const ordered=(entries,today)=>entries.filter(e=>isTraining(e)&&validateEntry(e,today).valid).sort((a,b)=>a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||a.id.localeCompare(b.id));
 function match(entries,slot,date){return entries.find(e=>e.id===recordId(slot,date))||entries.find(e=>e.date===date&&(e.together===true)===slot.together);}
+export function advanceRoutineReference(reference,previousDay,today=localDate()) {
+  return previousDay&&planWeekDates(reference)[0]===planWeekDates(previousDay)[0]?new Date(today+'T12:00:00'):reference;
+}
 const simpleEntry=(entry,id,title)=>entry.id===id&&entry.title===title&&!entry.note&&!entry.duration&&!entry.steps&&!entry.distance&&!entry.elevation&&!entry.photoId&&!entry.location&&!entry.workout&&!entry.exerciseDetails?.length&&!entry.mobilityExercises?.length&&entry.energy==null&&entry.mood==null&&!Object.keys(entry.values||{}).length;
 
 export function trainingRoutineWeek(state,reference=new Date(),today=localDate()) {
@@ -46,7 +49,7 @@ const cardioId=(start,index)=>`cardio-${start}-${index+1}`;
 export function cardioWeek(state,reference=new Date(),today=localDate()) {
   const {weeklyCardio:config}=personalSettings(state.settings),dates=planWeekDates(reference),start=dates[0],end=dates[6];
   if(!config)return {config:null,start,end,records:[],slots:[],completed:0};
-  const records=state.entries.filter(e=>['cardio','cycling'].includes(e.type)&&e.date>=start&&e.date<=end&&e.date>=config.since&&validateEntry(e,today).valid).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const records=state.entries.filter(e=>isCardio(e)&&e.date>=start&&e.date<=end&&e.date>=config.since&&validateEntry(e,today).valid).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
   const slots=Array.from({length:config.target},(_,index)=>({index,id:cardioId(start,index),entry:records.find(e=>e.id===cardioId(start,index))}));
   const used=new Set(slots.filter(s=>s.entry).map(s=>s.entry.id)),remaining=records.filter(e=>!used.has(e.id));
   for(const slot of slots)if(!slot.entry)slot.entry=remaining.shift();

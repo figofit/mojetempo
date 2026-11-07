@@ -11,7 +11,7 @@ export async function buildOlda({root=path.join(repoRoot,'clients/olda'),output=
   for(const file of ['icon-192.png','icon-512.png'])fs.copyFileSync(path.join(root,'assets',file),path.join(out,file));
   for(const file of ['manifest.webmanifest','_headers'])fs.copyFileSync(path.join(root,'src',file),path.join(out,file));
   const read=name=>fs.readFileSync(path.join(root,'src',name),'utf8');
-  const files=['domain.mjs','personal.mjs','training-routine.mjs','storage.mjs','local-storage.mjs','sync-rules.mjs','places.mjs','planning.mjs','habits.mjs','invitation.mjs','appearance.mjs','mobility-catalog.mjs','schedule-rules.mjs','pwa.mjs','vendor/leaflet/leaflet.js','vendor/leaflet/leaflet.css','vendor/leaflet/LICENSE'];
+  const files=['domain.mjs','personal.mjs','training-routine.mjs','history-model.mjs','history-stats.mjs','history-dashboard.mjs','storage.mjs','local-storage.mjs','sync-rules.mjs','places.mjs','planning.mjs','habits.mjs','invitation.mjs','appearance.mjs','mobility-catalog.mjs','schedule-rules.mjs','pwa.mjs','vendor/leaflet/leaflet.js','vendor/leaflet/leaflet.css','vendor/leaflet/LICENSE'];
   for(const file of files){const to=path.join(out,file);fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(path.join(source,file),to);}
   fs.copyFileSync(path.join(source,'app.js'),path.join(out,'tempo-app.js'));
   fs.copyFileSync(path.join(root,'src/shared.mjs'),path.join(out,'olda-shared.mjs'));

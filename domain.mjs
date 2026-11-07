@@ -9,6 +9,9 @@ export const ACTIVITY_TYPES = Object.freeze([
   { id: 'hiking', label: 'Výšlap / turistika', icon: 'mountain', category: 'movement', color: '#638b60', unit: 'min' },
   { id: 'cardio', label: 'Kardio', icon: 'heart', category: 'movement', color: '#bf806b', unit: 'min' },
   { id: 'home', label: 'Domácí trénink', icon: 'home', category: 'movement', color: '#7296a3', unit: 'min' },
+  { id: 'tennis', label: 'Tenis', icon: 'heart', category: 'movement', color: '#b6c66d', unit: 'min' },
+  { id: 'boxing', label: 'Box', icon: 'dumbbell', category: 'movement', color: '#c38c68', unit: 'min' },
+  { id: 'sport', label: 'Další sport', icon: 'heart', category: 'movement', color: '#869fb9', unit: 'min' },
   { id: 'sauna', label: 'Sauna', icon: 'flame', category: 'recovery', color: '#d5ac74', unit: 'min' },
   { id: 'wellness', label: 'Wellness', icon: 'sparkles', category: 'recovery', color: '#a7a0ba', unit: 'min' },
   { id: 'mobility', label: 'Mobilita / protažení', icon: 'sparkles', category: 'recovery', color: '#82a991', unit: 'min' },
@@ -335,11 +338,13 @@ export function computeStats(entries = [], settings = DEFAULT_SETTINGS, date = n
 
 /** A training is a gym or home workout; walks, sport and recovery remain separate activities. */
 export const isTraining = entry => ['strength','home'].includes(entry?.type);
+export const isJointTraining = entry => entry?.together===true&&(ACTIVITY_TYPES.some(type=>type.id===entry.type&&type.category==='movement')||entry.type==='mobility');
+export const isCardio = entry => ['cardio','cycling','tennis','boxing'].includes(entry?.type);
 
 /** Continue a confirmed joint-workout number without inventing dated historical records. */
 export function jointTrainingHistory(entries=[],settings={},date=new Date()) {
   const today=localDate(date);
-  const records=(Array.isArray(entries)?entries:[]).filter(e=>isTraining(e)&&e.together===true&&parseDate(e.date)&&e.date<=today).sort((a,b)=>a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id)));
+  const records=(Array.isArray(entries)?entries:[]).filter(e=>isJointTraining(e)&&parseDate(e.date)&&e.date<=today).sort((a,b)=>a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id)));
   const anchor=settings.jointTrainingAnchor,index=anchor?records.findIndex(e=>e.id===anchor.entryId):-1;
   const anchored=index>=0&&Number.isSafeInteger(anchor.number)&&anchor.number>=index+1&&anchor.number<=1000000;
   const offset=anchored?anchor.number-index-1:0;

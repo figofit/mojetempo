@@ -10,7 +10,9 @@ import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
 import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
-import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio} from './training-routine.mjs';
+import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio,advanceRoutineReference} from './training-routine.mjs';
+import {renderHistoryTeaser,renderHistoryDashboard,renderConsistencyDashboard} from './history-dashboard.mjs';
+import {normalizeTrainingHistory} from './history-model.mjs';
 
 const originalOlda=window.ITFIT_ORIGINAL||null;
 const appearance=originalOlda?{title:'Olda 4.0 · ITFIT',id:'original-olda'}:siteAppearance(location.href);
@@ -51,6 +53,7 @@ const number = n => Number(n || 0).toLocaleString('cs-CZ');
 const dateText = (date, options = {}) => new Date(`${date}T12:00:00`).toLocaleDateString('cs-CZ', {day:'numeric',month:'long',...options});
 const typeById = id => ACTIVITY_TYPES.find(type => type.id === id);
 const moduleOn = id => state.settings.modules.includes(id);
+const activityOn = type => moduleOn(type.category)||!!originalOlda&&type.id==='mobility';
 const entries = () => demo ? demoEntries : state.entries;
 const views = {overview:'Přehled',plan:'Můj plán',diary:'Deník aktivit',chronicle:'Moje kronika',stats:'Statistiky',modules:'Moje moduly',settings:'Cíle a nastavení',invite:'Pozvánka'};
 const viewIcons = {overview:'grid',plan:'calendar',diary:'book',chronicle:'image',stats:'chart',modules:'layers'};
@@ -72,6 +75,7 @@ let habitsOpen=false;
 let habitJournalDate=localDate();
 let planReference=new Date();
 let routineReference=new Date(),routineSaving=false,cardioDate='';
+let consistencyMonth=localDate().slice(0,7);
 let invitationCode='',invitationData=null,invitationError='',invitationRevision=0;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const syncChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('moje-tempo-updates') : null;
@@ -139,7 +143,7 @@ function renderWorkoutDetails(workout) {
 function visibleEntries() {
   return entries().filter(entry => {
     const type = typeById(entry.type);
-    return type && moduleOn(type.category);
+    return type && activityOn(type);
   });
 }
 
@@ -150,7 +154,7 @@ function empty(message = 'Tvůj příběh začíná prvním zápisem.', button =
 function renderToday() {
   const today=localDate(), daily=visibleEntries().filter(entry=>entry.date===today);
   const minutes=daily.filter(entry=>typeById(entry.type).category==='movement').reduce((sum,entry)=>sum+entry.duration,0);
-  const quick=[['strength','Fitko','dumbbell'],['cycling','Kolo','bike'],['walking','Procházka','footprints'],['hiking','Výšlap','mountain'],['mobility','Mobilita / protažení','sparkles'],['cardio','Bazén / kardio','heart']].filter(([type])=>moduleOn(typeById(type).category));
+  const quick=[['strength','Fitko','dumbbell'],['cycling','Kolo','bike'],['walking','Procházka','footprints'],['hiking','Výšlap','mountain'],['mobility','Mobilita / protažení','sparkles'],['cardio','Bazén / kardio','heart']].filter(([type])=>activityOn(typeById(type)));
   return `<section class="panel today-panel"><div class="panel-header"><div><span class="eyebrow">MALÝ ZÁPIS, VELKÝ ROZDÍL</span><h2 class="panel-title">Dnes</h2><p class="panel-subtitle">${daily.length?`${daily.length} zápisů${moduleOn('movement')?` · ${minutes} minut pohybu`:''}`:'Jaký bude tvůj dnešní malý krok?'}</p></div><span class="tag">${dateText(today,{month:'short'})}</span></div><div class="today-actions">${quick.map(([type,label,symbol])=>`<button class="button secondary small" data-action="quick-entry" data-type="${type}" ${label==='Mobilita / protažení'?'data-title="Mobilita / protažení"':label==='Bazén / kardio'?'data-title="Bazén / kardio"':''}>${icon(symbol)}${label}</button>`).join('')}${moduleOn('steps')?`<button class="button ghost small" data-action="yesterday-steps">${icon('footprints')}Doplnit včerejší kroky</button>`:''}</div>${daily.length?`<div class="today-records">${daily.slice(0,4).map(entry=>`<button class="today-record" data-action="${demo?'quick-entry':'edit'}" data-type="${entry.type}" data-id="${esc(entry.id)}">${icon('check')}<span>${esc(entry.title||typeById(entry.type).label)}</span><small>${entry.type==='steps'?`${number(entry.steps)} kroků`:entry.duration?`${entry.duration} min`:entry.durationUnknown&&!['moment','day'].includes(entry.type)?'bez měření času':entry.type==='day'?'denní zápis':'moment'}</small></button>`).join('')}</div>`:''}${renderTodayHabits(state.settings,localDate(),habitsOpen)}</section>${renderTodayPlan(state.settings)}`;
 }
 
@@ -190,7 +194,7 @@ function renderOverview(stats) {
 
 function renderDiary(stats) {
   const filtered=stats.recentEntries.filter(entry=>activityFilter==='all'||entry.type===activityFilter);
-  const available=ACTIVITY_TYPES.filter(type=>moduleOn(type.category));
+  const available=ACTIVITY_TYPES.filter(type=>activityOn(type));
   return `${heading('Deník aktivit', 'Všechno, co děláš pro sebe, na jednom místě.')}<div class="filter-row"><button class="filter-chip ${activityFilter==='all'?'active':''}" data-filter="all">Všechny aktivity</button>${available.map(type=>`<button class="filter-chip ${activityFilter===type.id?'active':''}" data-filter="${type.id}">${icon(type.icon)}${esc(type.label)}</button>`).join('')}</div><section class="panel"><div class="panel-header"><h2 class="panel-title">${filtered.length} ${filtered.length===1?'záznam':'záznamů'}</h2><div class="activity-actions"><button class="button ghost small" data-action="csv">${icon('download')}CSV</button><button class="button ghost small" data-action="ics">${icon('calendar')}Do kalendáře</button></div></div><div class="activity-list">${filtered.length?filtered.map(entry=>activityRow(entry,true)).join(''):empty('Zatím tu není žádný zápis.')}</div></section>`;
 }
 
@@ -205,10 +209,14 @@ function renderTrainingSummary() {
   const week=computeStats(entries().filter(entry=>entry.date<=localDate()),state.settings);
   const otherCount=types=>week.typeBreakdown.filter(type=>types.includes(type.id)).reduce((sum,type)=>sum+type.count,0);
   const average=value=>value==null?'—':value.toLocaleString('cs-CZ',{maximumFractionDigits:1});
-  return `<section class="panel training-summary"><div class="panel-header"><div><h2 class="panel-title">Tvůj tréninkový rytmus</h2><p class="panel-subtitle">Posilování společně i samostatně. Každý zapsaný trénink se počítá jednou.</p></div>${icon('dumbbell')}</div><div class="training-totals"><div><span>${joint.anchored?'Tréninků v deníku':'Tréninků celkem'}</span><strong>${number(training.total)}</strong></div><div><span>${joint.anchored?'Společných tréninků celkem':'Z toho spolu s Michalem'}</span><strong>${number(joint.count)}</strong></div></div>${joint.anchored?`<p class="form-hint">Společné počítadlo navazuje na potvrzené pořadí. Společných tréninků s datem v tomto deníku: ${joint.recorded}. Průměry počítáme jen z datovaných zápisů.</p>`:joint.needsAnchor?'<p class="form-hint">Společné historické pořadí je potřeba znovu navázat na existující trénink.</p>':''}<div class="training-periods">${training.periods.map(period=>`<article class="training-period"><h3>${{1:'Poslední měsíc',6:'Poslední půlrok',12:'Poslední rok'}[period.months]}</h3><div class="training-average">${average(period.weeklyAverage)}<span>průměr za týden</span></div><p>${period.count} celkem · ${period.together} spolu</p><small>${period.days?`${dateText(period.start,{month:'short',year:'numeric'})} – ${dateText(period.end,{month:'short',year:'numeric'})}`:'Zatím bez zapsané historie'}</small></article>`).join('')}</div><p class="form-hint">Počítáme pouze posilovnu a domácí posilování. Průměr vychází ze zapsaných tréninků a délky evidence v daném období. U kratší historie počítáme až od jejího začátku. Průměr se zobrazí po prvním týdnu evidence.</p><div class="other-movement"><h3>Další pohyb · tento týden</h3><div><span>Kolo a kardio</span><strong>${otherCount(['cycling','cardio'])}</strong></div><div><span>Chůze a výšlapy</span><strong>${otherCount(['walking','hiking'])}</strong></div></div></section>`;
+  return `<section class="panel training-summary"><div class="panel-header"><div><h2 class="panel-title">Tvůj tréninkový rytmus</h2><p class="panel-subtitle">Posilování společně i samostatně. Každý zapsaný trénink se počítá jednou.</p></div>${icon('dumbbell')}</div><div class="training-totals"><div><span>${joint.anchored?'Tréninků v deníku':'Tréninků celkem'}</span><strong>${number(training.total)}</strong></div><div><span>${joint.anchored?'Společných tréninků celkem':'Z toho spolu s Michalem'}</span><strong>${number(joint.count)}</strong></div></div>${joint.anchored?`<p class="form-hint">Společné počítadlo navazuje na potvrzené pořadí. Společných tréninků s datem v tomto deníku: ${joint.recorded}. Průměry počítáme jen z datovaných zápisů.</p>`:joint.needsAnchor?'<p class="form-hint">Společné historické pořadí je potřeba znovu navázat na existující trénink.</p>':''}<div class="training-periods">${training.periods.map(period=>`<article class="training-period"><h3>${{1:'Poslední měsíc',6:'Poslední půlrok',12:'Poslední rok'}[period.months]}</h3><div class="training-average">${average(period.weeklyAverage)}<span>průměr za týden</span></div><p>${period.count} celkem · ${period.together} spolu</p><small>${period.days?`${dateText(period.start,{month:'short',year:'numeric'})} – ${dateText(period.end,{month:'short',year:'numeric'})}`:'Zatím bez zapsané historie'}</small></article>`).join('')}</div><p class="form-hint">Počítáme pouze posilovnu a domácí posilování. Průměr vychází ze zapsaných tréninků a délky evidence v daném období. U kratší historie počítáme až od jejího začátku. Průměr se zobrazí po prvním týdnu evidence.</p><div class="other-movement"><h3>Další pohyb · tento týden</h3><div><span>Kolo a kardio</span><strong>${otherCount(['cycling','cardio','tennis','boxing'])}</strong></div><div><span>Chůze a výšlapy</span><strong>${otherCount(['walking','hiking'])}</strong></div></div></section>`;
 }
 
 function renderStats(stats) {
+  if(originalOlda&&state.settings.trainingHistory)return `${heading('Náš příběh. Tvoje konzistence.','Historie spolupráce a nová evidence skutečně zapsaných aktivit.','<a class="button secondary" href="#overview">Zpět na odškrtávání</a>')}${renderHistoryDashboard(state)}${renderConsistencyDashboard(state,consistencyMonth)}<details class="panel history-extra-stats"><summary>Další pohybové statistiky a cviky</summary>${renderStatsDetails(stats)}</details>`;
+  return renderStatsDetails(stats);
+}
+function renderStatsDetails(stats) {
   const all=visibleEntries();
   const pause=activeRest(state.settings);
   const totalMinutes=all.reduce((sum,entry)=>sum+Number(entry.duration),0);
@@ -269,6 +277,12 @@ async function hydratePhotos(revision) {
 }
 
 function render() {
+  const calendarToday=localDate();
+  if(originalOlda&&renderedDate&&renderedDate!==calendarToday){
+    routineReference=advanceRoutineReference(routineReference,renderedDate,calendarToday);
+    if(consistencyMonth===renderedDate.slice(0,7))consistencyMonth=calendarToday.slice(0,7);
+    if(cardioDate===renderedDate)cardioDate='';
+  }
   destroyMap();
   photoUrls.forEach(url=>URL.revokeObjectURL(url));photoUrls=[];
   const revision=++renderRevision;
@@ -284,8 +298,8 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
-  if(allowed&&(currentView==='stats'||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate)+renderHistoryTeaser(state)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
+  if(allowed&&(currentView==='stats'&&!(originalOlda&&state.settings.trainingHistory)||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings));
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
@@ -329,7 +343,7 @@ function planCallbacks() {
 async function openEntry(id=null, preset={}) {
   if(originalOlda&&!document.body.classList.contains('olda-editing')){notify('Společný zápis otevřeš malou šipkou vpravo dole.');return;}
   if(demo) await startOwn();
-  const available=ACTIVITY_TYPES.filter(type=>moduleOn(type.category));
+  const available=ACTIVITY_TYPES.filter(type=>activityOn(type));
   if(!available.length) {location.hash='modules';notify('Zapni nejprve alespoň jeden modul.');return;}
   $('#entry-form').reset();
   $('#entry-form').elements.durationUnknown.checked=!!originalOlda;
@@ -667,6 +681,7 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(originalOlda&&name==='consistency-week'){routineReference=new Date(element.dataset.week+'T12:00:00');cardioDate='';location.hash='overview';if(currentView==='overview')render();return;}
   if(originalOlda&&['routine-prev','routine-next','routine-today'].includes(name)){
     cardioDate='';
     if(name==='routine-today')routineReference=new Date();
@@ -763,6 +778,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('toggle',event=>{if(event.target.matches?.('.today-habits'))habitsOpen=event.target.open;},true);
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1)));
 document.addEventListener('change',async event=>{
+  if(originalOlda&&event.target.id==='consistency-month'){if(event.target.validity.valid&&event.target.value){consistencyMonth=event.target.value;render();}return;}
   if(originalOlda&&event.target.id==='cardio-date'){cardioDate=event.target.value;render();return;}
   const el=event.target;
   if(el.id==='habit-log-date'){habitJournalDate=el.value||localDate();if(habitJournalDate>localDate())habitJournalDate=localDate();render();return;}
@@ -784,6 +800,13 @@ document.addEventListener('change',async event=>{
   }
 });
 document.addEventListener('submit',async event=>{
+  if(originalOlda&&event.target.id==='history-form'){
+    event.preventDefault();const form=event.target,values=Object.fromEntries(new FormData(form));
+    const years=[...form.querySelectorAll('.history-year-count')].map(input=>({year:Number(input.dataset.year),count:input.value===''?NaN:Number(input.value)}));
+    try{await persist(current=>({...current,settings:{...current.settings,trainingHistory:normalizeTrainingHistory({...current.settings.trainingHistory,...values,years})}}));settingsDirty=false;render();notify('Historické součty jsou uložené. Jednotlivé zápisy se nezměnily.');}
+    catch(error){form.querySelector('#history-form-error').textContent=error.message;}
+    return;
+  }
   if(event.target.matches('.custom-habit-editor')) {
     event.preventDefault();
     try {const values=Object.fromEntries(new FormData(event.target)),id=event.target.dataset.habitId;await persist(current=>{const archived=values.archived==='on',customHabits=current.settings.customHabits.map(h=>h.id===id?{...h,name:values.name,note:values.note,target:Number(values.target),archived}:h),habits=archived?current.settings.habits.filter(h=>h!==id):[...new Set([...current.settings.habits,id])];return {...current,settings:{...current.settings,...personalSettings({...current.settings,customHabits}),habits}};});render();notify('Návyk je uložený. Historie zůstala zachovaná.');}catch(error){notify(error.message,true);}return;
@@ -832,7 +855,13 @@ document.addEventListener('click',event=>{
   try {if(typeof input.showPicker==='function')input.showPicker();else input.focus();}catch{input.focus();}
 });
 $('#exercise-search').addEventListener('input',event=>{exerciseQuery=event.target.value;renderExerciseLibrary();});
-document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
+document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form,#history-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
+document.addEventListener('input',event=>{
+  if(!event.target.matches('.history-year-count'))return;
+  const form=event.target.closest('form'),counts=[...form.querySelectorAll('.history-year-count')].map(input=>input.value===''?NaN:Number(input.value)),sum=counts.reduce((a,b)=>a+b,0),total=state.settings.trainingHistory.total;
+  form.querySelector('#history-sum').textContent=(Number.isFinite(sum)?sum:'—')+' / '+total;
+  form.querySelector('button[type="submit"]').disabled=sum!==total||counts.some(n=>!Number.isSafeInteger(n)||n<0);
+});
 $('#place-query').addEventListener('input',()=>{placeSearchRevision++;$('#place-results').replaceChildren();$('#place-status').textContent='';$('#place-latitude').value='';$('#place-longitude').value='';});
 $('#account-form').addEventListener('submit',async event=>{
   event.preventDefault();$('#account-submit').disabled=true;$('#account-error').textContent='';
