@@ -1,11 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateEntry,computeStrengthStats,strengthTargets,DEFAULT_SETTINGS,exportCSV,exportICS,workoutLabel} from '../domain.mjs';
+import {validateEntry,computeStrengthStats,computeExerciseFrequency,strengthTargets,DEFAULT_SETTINGS,exportCSV,exportICS,workoutLabel} from '../domain.mjs';
 import {mergeDiaries,emptyDiary} from '../sync-rules.mjs';
 const exercise=(pattern,sets=3,name='')=>({pattern,sets,name});
 const log=(overrides={})=>({id:'gym',type:'strength',date:'2026-10-29',duration:45,steps:0,mood:null,title:'Trénink',note:'',...overrides});
 const workout=(exercises=[],focus='fullbody',splitName='')=>({focus,splitName,exercises});
 const date=new Date(2026,9,29,12);
+
+test('exercise frequency counts real appearances once per session, including unknown sets, without inventing missing workouts',()=>{
+ const logs=[log({workout:workout([{name:'Tah',pattern:'hinge',sets:0,setsUnknown:true},{name:'  tah ',pattern:'hinge',sets:3},{name:'Dřep',pattern:'squat',sets:8},{name:'Přítah',pattern:'horizontal_pull',sets:0,setsUnknown:true}])}),log({id:'second',workout:workout([{name:'TAH',pattern:'hinge',sets:5},{name:'Klik',pattern:'horizontal_push',sets:0,setsUnknown:true}])}),log({id:'no-details'}),log({id:'cardio',type:'cardio'}),log({id:'future',date:'2026-10-30',workout:workout([exercise('hinge')])})];
+ const result=computeExerciseFrequency(logs,date);assert.equal(result.sessions,3);assert.equal(result.detailedSessions,2);assert.equal(result.exercises.find(e=>e.name==='Tah').count,2);assert.equal(result.groups.hinge,2);assert.equal(result.groups.squat,1);assert.equal(result.groups.pull,1);assert.equal(result.groups.push,1);
+ assert.equal(result.exercises.length,4);assert.equal(computeStrengthStats(logs,DEFAULT_SETTINGS,date).totalSets,16);
+});
+
+test('frequency filters calendar weeks and 28 days while retaining an all-records view',()=>{
+ const logs=['2026-08-01','2026-10-10','2026-10-29'].map((day,i)=>log({id:'frequency-'+i,date:day,workout:workout([{name:'Testovací cvik',pattern:'other',sets:0,setsUnknown:true}])}));
+ assert.equal(computeExerciseFrequency(logs,date).exercises[0].count,3);assert.equal(computeExerciseFrequency(logs,date,'28days').exercises[0].count,2);assert.equal(computeExerciseFrequency(logs,date,'week').exercises[0].count,1);
+ assert.equal(computeExerciseFrequency([],date).detailedSessions,0);
+});
 
 test('a workout records patterns alone or named exercises and strips unknown properties',()=>{
   const result=validateEntry(log({workout:workout([exercise('squat'),exercise('hinge',4,'  Rumunský tah  '),{...exercise('horizontal_push'),admin:true}])}));

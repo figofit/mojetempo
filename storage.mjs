@@ -4,12 +4,15 @@ import { emptyDiary, mergeDiaries, same } from './sync-rules.mjs';
 
 const requestedDiary=new URL(location.href).searchParams.get('denik')||document.querySelector('meta[name="tempo-diary"]')?.content||'';
 const scope=requestedDiary==='olda'?'olda':'';
+const publicEnabled=document.querySelector('meta[name="tempo-diary"]')?.content==='olda';
+const publicKey='published-diary:olda';
+let publicRecord=null;
 let user=null,diary=null,diaries=[],available=false,syncing=null,status='Místní deník',timer;
 const listeners=new Set();
 const key=id=>`account:${id}${scope?':diary:'+scope:''}`;
 const photoKey=(id,owner=user?.id)=>owner?`${key(owner)}:${id}`:id;
 const emit=()=>listeners.forEach(fn=>fn(getAccount()));
-export const getAccount=()=>({user,available,status,diary,diaries,scope});
+export const getAccount=()=>({user,available,status,diary,diaries,scope,publicRead:publicEnabled&&!!publicRecord,readOnly:publicEnabled&&!diary});
 export const onAccountChange=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};
 export class APIError extends Error {constructor(status,message){super(message);this.status=status;}}
 async function request(path,options={}) {
@@ -39,7 +42,8 @@ export async function initializeAccount() {
     await local.setValue('active-account',user);
   } catch {user=previous;available=!!previous;diary=await local.getValue('diary-access:'+scope);}
   status=user?'Čeká na synchronizaci':'Místní deník';emit();
-  if(user)await syncCloud().catch(()=>{});
+  if(publicEnabled)publicRecord=await local.getValue(publicKey);
+  if(user||publicEnabled)await syncCloud().catch(()=>{});
 }
 export async function authenticate(mode,data) {
   if(syncing)await syncing.catch(()=>{});
@@ -55,8 +59,10 @@ export async function logout() {
   if(!navigator.onLine)throw new Error('Pro bezpečné odhlášení se připoj k internetu.');
   await api('logout',{method:'POST',body:'{}'}).catch(error=>{if(error.status!==401)throw error;});
   user=null;diary=null;diaries=[];await local.setValue('active-account',null);await local.setValue('diary-access:'+scope,null);status='Místní deník';emit();
+  if(publicEnabled)await syncCloud().catch(()=>{});
 }
 export async function loadState() {
+  if(publicEnabled&&!diary)return publicRecord?.state??emptyDiary();
   if(scope&&(!user||!diary))return emptyDiary();
   if(!user)return local.loadState();
   return (await local.getValue(key(user.id)))?.state??emptyDiary();
@@ -75,18 +81,28 @@ export async function updateState(mutator) {
 }
 export async function saveState(state) {return updateState(()=>state);}
 export async function savePhoto(id,blob) {
+  if(scope&&(!user||!diary))throw new Error('Pro zápis se přihlas.');
   if(user&&blob.size>1_000_000)throw new Error('Fotografie pro účet musí být do 1 MB. Vyber menší obrázek.');
   return local.savePhoto(photoKey(id),blob);
 }
 export async function getPhoto(id) {
+  if(publicEnabled&&!diary){const stored=await local.getPhoto(publicKey+':'+id);if(stored)return stored;const blob=await (await request(`public-photos/${encodeURIComponent(id)}`)).blob();await local.savePhoto(publicKey+':'+id,blob);return blob;}
   const owner=user?.id,stored=await local.getPhoto(photoKey(id,owner));
   if(stored||!owner)return stored;
   const blob=await (await request(`photos/${encodeURIComponent(id)}`,{headers:{'X-Tempo-Account':owner}})).blob();
   await local.savePhoto(photoKey(id,owner),blob);return blob;
 }
-export async function deletePhoto(id) {return local.deletePhoto(photoKey(id));}
+export async function deletePhoto(id) {if(scope&&(!user||!diary))throw new Error('Pro zápis se přihlas.');return local.deletePhoto(photoKey(id));}
 function schedule(){clearTimeout(timer);status='Čeká na odeslání';emit();timer=setTimeout(()=>syncCloud().catch(()=>{}),500);}
 export async function syncCloud() {
+  if(publicEnabled&&!diary){
+    if(user){const current=await api('session');diary=current.diary||null;diaries=current.diaries||[];}
+    if(!diary){
+      if(syncing)return syncing;
+      syncing=(async()=>{status='Načítám přehled…';emit();try{publicRecord=await api('public-diary');await local.setValue(publicKey,publicRecord);status='Aktuální přehled';}catch(error){status=publicRecord?'Offline · uložený přehled':'Přehled se nepodařilo obnovit';throw error;}finally{emit();}})().finally(()=>{syncing=null;});
+      return syncing;
+    }
+  }
   if(!user)return;
   if(syncing)return syncing;
   const owner=user.id;
@@ -156,4 +172,4 @@ export async function loadServerVersion() {
 }
 window.addEventListener('online',()=>syncCloud().catch(()=>{}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncCloud().catch(()=>{});});
-setInterval(()=>{if(user&&!document.hidden&&navigator.onLine)syncCloud().catch(()=>{});},30000);
+setInterval(()=>{if((user||publicEnabled)&&!document.hidden&&navigator.onLine)syncCloud().catch(()=>{});},30000);

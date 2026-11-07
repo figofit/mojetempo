@@ -113,6 +113,20 @@ async function api(request,env) {
   if(!env.DB)fail(503,'Databáze zatím není připojená. Místní deník funguje dál.');
   const db=env.DB.withSession?env.DB.withSession('first-primary'):env.DB;
   await initialize(env.DB);
+  if(path==='/api/public-diary'||path.startsWith('/api/public-photos/')) {
+    // Publication belongs to this deployment, never to a client header or query.
+    if(env.OLDA_PUBLIC_DIARY!=='olda'||env.OLDA_DIARY!=='olda')fail(404,'Tento přehled není dostupný.');
+    if(method!=='GET')fail(405,'Přehled je pouze ke čtení.');
+    const row=await db.prepare('SELECT d.revision,d.state FROM diaries d JOIN diary_links l ON l.owner_id=d.account_id WHERE l.id=?').bind('olda').first();
+    if(!row)fail(404,'Deník není dostupný.');
+    const state=JSON.parse(row.state);
+    if(path==='/api/public-diary')return json({revision:row.revision,state});
+    const match=path.match(/^\/api\/public-photos\/([a-zA-Z0-9_-]{1,128})$/);
+    if(!match||!state.entries.some(entry=>entry.photoId===match[1]))fail(404,'Fotografie nebyla nalezena.');
+    const photo=await db.prepare('SELECT p.mime,p.bytes FROM photos p JOIN diary_links l ON l.owner_id=p.account_id WHERE l.id=? AND p.id=?').bind('olda',match[1]).first();
+    if(!photo)fail(404,'Fotografie nebyla nalezena.');
+    return new Response(binary(photo.bytes),{headers:{'Content-Type':photo.mime,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'}});
+  }
   if(path==='/api/session'&&method==='GET') {
     const account=await session(db,request),diaries=await availableDiaries(db,account);
     let diary=null;

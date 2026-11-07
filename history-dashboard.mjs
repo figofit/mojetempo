@@ -1,10 +1,20 @@
-import {localDate,ACTIVITY_TYPES,entryDateRange} from './domain.mjs';
-import {historicalTotals,anniversaryInfo,consistencySeries,monthlyConsistency} from './history-stats.mjs';
+import {localDate,ACTIVITY_TYPES,entryDateRange,isTraining,isCardio,jointTrainingHistory} from './domain.mjs';
+import {historicalTotals,anniversaryInfo,consistencySeries,monthlyConsistency,consistencyWeek,trackingStart} from './history-stats.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateText=key=>new Date(key+'T12:00:00').toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric'});
 const shortDate=key=>new Date(key+'T12:00:00').toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'});
 const yearsText=n=>`${n} ${n===1?'rok':n>=2&&n<=4?'roky':'let'}`;
+
+export function renderOverviewPulse(state,today=localDate()){
+  const current=consistencyWeek(state,today,today),previousDay=new Date(current.start+'T12:00:00');previousDay.setDate(previousDay.getDate()-7);
+  const previous=consistencyWeek(state,localDate(previousDay),today),since=trackingStart(state,today),month=monthlyConsistency(state,today.slice(0,7),today);
+  const knownMonth=[...month.records,...month.weeklyRecords.filter(e=>e.date.startsWith(month.month)&&entryDateRange(e).end.startsWith(month.month))];
+  const monthStrength=knownMonth.filter(isTraining).length,monthCardio=knownMonth.filter(isCardio).length;
+  const total=historicalTotals(state,today)?.total??jointTrainingHistory(state.entries,state.settings,new Date(today+'T12:00:00')).count;
+  const weekCard=(week,title)=>{const before=week.end<since;return `<article class="pulse-card ${week.goalMet?'is-complete':''}"><p>${title}</p><small>${shortDate(week.start)} – ${shortDate(week.end)}</small><strong>${before?'Bez evidence':week.paused?'Pauza':week.target?week.percent+' %':'Bez cíle'}</strong><span>${before?'Před začátkem nových zápisů':`Síla ${week.strength}/${week.targets.solo+week.targets.joint} · kardio ${week.cardio}/${week.targets.cardio}`}</span>${!before?`<small>${week.goalMet?'Týdenní cíl splněný':week.ongoing?'Průběžně zapsáno':'Podle uložených zápisů'}</small>`:''}</article>`;};
+  return `<section class="overview-pulse" aria-label="Rychlý přehled Oldova pohybu"><div class="pulse-heading"><h1>Jak se ti daří, Oldo?</h1><a href="#stats">Podrobné statistiky →</a></div><div class="pulse-grid">${weekCard(current,'Aktuální týden')}${weekCard(previous,'Předchozí týden')}<article class="pulse-card"><p>Tento měsíc</p><small>${new Date(today+'T12:00:00').toLocaleDateString('cs-CZ',{month:'long',year:'numeric'})}</small><strong>${monthStrength}<small> silové</small> · ${monthCardio}<small> kardio</small></strong><span>Aktivní týdny ${month.activeWeeks} · splněný cíl ${month.goalWeeks}</span><small>Od začátku nové evidence ${shortDate(since)}${month.weeklyRecords.length?' · včetně potvrzení za celý týden':''}</small></article><article class="pulse-card pulse-total"><p>Společně celkem</p><small>S Michalem · celá naše historie</small><strong>${total}</strong><span>společných tréninků</span><small>${state.entries.filter(e=>isTraining(e)&&e.date<=today).length} silové zápisy v nové evidenci</small></article></div></section>`;
+}
 
 function lineChart(points,lines,label){
   const w=600,h=255,left=58,right=30,top=44,bottom=52,max=Math.max(1,...points.flatMap(p=>lines.map(l=>p[l.key]))),y=value=>top+(max-value)/max*(h-top-bottom),x=i=>points.length===1?(w+left-right)/2:left+i*(w-left-right)/(points.length-1);

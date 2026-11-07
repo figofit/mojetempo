@@ -24,7 +24,7 @@ function projection(state) {
 window.ITFIT_ORIGINAL={
   routes,labels:{overview:'Přehled',diary:'Tréninky a aktivity',plan:'Tvůj plán',chronicle:'Kronika',stats:'Pokrok',modules:'Návyky a moduly'},
   overview(state,account,summary='') {
-    const allowed=!!account.diary;
+    const allowed=!!account.diary||account.publicRead;
     let body=original.home(projection(allowed?state:emptyDiary()));
     if(allowed&&summary)body=body.replace(/<div class="stats">[\s\S]*?<\/div><div class="grid">/,summary+'<div class="grid">');
     const intro=allowed?'':`<section class="card private-entry"><h2>Tvůj osobní deník.</h2><p>Oldo, přihlas se svým účtem Moje IT FIT. Tvoje zápisy uvidíš tady i v Moje IT FIT.</p>${account.user?'<p>Tento účet nemá přístup k Oldovu deníku.</p><button class="button ghost" data-action="logout-account">Odhlásit tento účet</button>':'<button class="button primary" data-action="open-account">Přihlásit se</button>'}</section>`;

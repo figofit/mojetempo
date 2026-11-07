@@ -285,6 +285,28 @@ export function computeStrengthStats(entries=[],settings=DEFAULT_SETTINGS,date=n
   return {start,end:today,sessions:sessions.length,detailedSessions,unknownSessions:sessions.length-detailedSessions,patterns,groups,totalSets:patterns.reduce((sum,p)=>sum+p.sets,0),focuses:[...focuses].map(([label,count])=>({label,count})),pullPush:ratio(groups.pull,groups.push,targets.strengthPullPerPush),hingeSquat:ratio(groups.hinge,groups.squat,targets.strengthHingePerSquat)};
 }
 
+/** Each named exercise counts once per session, independently of recorded sets. */
+export function computeExerciseFrequency(entries=[],date=new Date(),period='all') {
+  const normalize=name=>name.trim().toLocaleLowerCase('cs-CZ').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const end=localDate(date),current=parseDate(end);
+  const start=period==='all'?'':localDate(addDays(current,period==='28days'?-27:-((current.getDay()+6)%7)));
+  const sessions=entries.filter(entry=>entry&&parseDate(entry.date)&&entry.datePrecision!=='week'&&entry.date>=start&&entry.date<=end&&isTraining(entry));
+  const patterns=MOVEMENT_PATTERNS.map(pattern=>({...pattern,count:0})),byPattern=new Map(patterns.map(p=>[p.id,p])),exercises=new Map();
+  let detailedSessions=0;
+  for(const entry of sessions){
+    const seen=new Set();
+    for(const exercise of entry.workout?.exercises||[]){
+      const pattern=byPattern.get(exercise.pattern);if(!pattern)continue;
+      const name=exercise.name?.trim()||pattern.short,key=exercise.pattern+':'+normalize(name);
+      if(seen.has(key))continue;seen.add(key);pattern.count++;
+      const row=exercises.get(key)||{name,pattern:pattern.id,count:0,lastDate:entry.date};row.count++;if(entry.date>row.lastDate)row.lastDate=entry.date;exercises.set(key,row);
+    }
+    if(seen.size)detailedSessions++;
+  }
+  const groups=Object.fromEntries(['hinge','squat','pull','push','core','carry','other'].map(group=>[group,patterns.filter(p=>p.group===group).reduce((n,p)=>n+p.count,0)]));
+  return {start,end,sessions:sessions.length,detailedSessions,patterns,groups,exercises:[...exercises.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'cs'))};
+}
+
 /**
  * Stats use the selected date's local Monday–Sunday week and calendar month.
  * Movement minutes and sessions exclude recovery; steps sum all log entries.

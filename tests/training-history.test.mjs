@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeTrainingHistory} from '../history-model.mjs';
 import {historicalTotals,anniversaryInfo,consistencyWeek,consistencySeries,monthlyConsistency} from '../history-stats.mjs';
-import {renderHistoryDashboard,renderConsistencyDashboard} from '../history-dashboard.mjs';
+import {renderHistoryDashboard,renderConsistencyDashboard,renderOverviewPulse} from '../history-dashboard.mjs';
 import {emptyDiary,mergeDiaries} from '../sync-rules.mjs';
 import {personalSettings} from '../personal.mjs';
 import {validateEntry,jointTrainingHistory} from '../domain.mjs';
@@ -20,6 +20,12 @@ function fixture(){
   state.settings.trainingHistory={startDate:'2024-11-09',startCertainty:'probable',through:'2026-11-04',total:12,coach:'Test coach',client:'Test client',source:'Reconstructed annual boundaries; verified overall running total.',years:[{year:2024,count:2},{year:2025,count:6},{year:2026,count:4}],highlights:[{id:'history-test-note',title:'Candidate month',summary:'Not an absolute record',detail:'Only a documented calendar checkpoint.',records:[{date:'2025-04-03',number:5}]}]};
   return state;
 }
+
+test('the opening overview shows real current and previous weeks, monthly counts and historical totals',()=>{
+ const state=fixture();state.entries.push(entry({id:'friday',type:'strength',date:'2026-11-06'}),entry({id:'cardio-a',type:'boxing',date:'2026-11-02',datePrecision:'week'}),entry({id:'cardio-b',type:'tennis',date:'2026-11-02',datePrecision:'week'}));
+ const before=structuredClone(state),html=renderOverviewPulse(state,today);assert.ok(html.includes('100 %'));assert.ok(html.includes('Síla 3/3 · kardio 2/2'));assert.ok(html.includes('Před začátkem nových zápisů'));assert.ok(html.includes('<strong>12</strong>'));assert.ok(html.includes('3<small> silové</small> · 2<small> kardio</small>'));
+ const next=renderOverviewPulse(state,'2026-11-11');assert.ok(next.includes('0 %'));assert.ok(next.includes('100 %'));assert.deepEqual(state,before);
+});
 
 test('historical metadata validates the complete annual sum and preserves edits without creating diary records',()=>{
   const state=fixture(),before=structuredClone(state.entries),h=normalizeTrainingHistory(state.settings.trainingHistory);
