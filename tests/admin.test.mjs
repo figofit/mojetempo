@@ -88,6 +88,18 @@ async function fixture() {
   return {db,sqlite,env,request,owner,ordinary,password};
 }
 
+test('cooperation estimates persist through the API and survive edits from an older installed client',async()=>{
+ const f=await fixture();
+ try{
+  const initial=(await f.request('/api/diary',{user:f.owner})).body;
+  initial.state.settings.trainingHistory={startDate:'2024-11-09',startCertainty:'probable',through:'2026-11-04',total:12,coach:'Coach',client:'Client',source:'Calendar reconstruction',years:[{year:2024,count:2},{year:2025,count:6},{year:2026,count:4}],highlights:[],cooperation:{certainty:'estimated',source:'Approximate anniversary checkpoints',years:[{year:1,count:7},{year:2,count:5}]}};
+  const saved=await f.request('/api/diary',{user:f.owner,method:'PUT',data:initial});assert.equal(saved.status,200);assert.deepEqual(saved.body.state.settings.trainingHistory.cooperation,initial.state.settings.trainingHistory.cooperation);
+  const legacy=structuredClone(saved.body);delete legacy.state.settings.trainingHistory.cooperation;legacy.state.settings.trainingHistory.source='Edited by an older installed application';
+  const again=await f.request('/api/diary',{user:f.owner,method:'PUT',data:legacy});assert.equal(again.status,200);assert.deepEqual(again.body.state.settings.trainingHistory.cooperation,initial.state.settings.trainingHistory.cooperation);assert.equal(again.body.state.entries.length,0);
+  const invalid=structuredClone(again.body);invalid.state.settings.trainingHistory.cooperation.years[0].count=8;assert.equal((await f.request('/api/diary',{user:f.owner,method:'PUT',data:invalid})).status,400);
+ }finally{f.sqlite.close();}
+});
+
 test('registration never grants admin by order, submitted role, or login address',async()=>{
   const f=await fixture();
   try {

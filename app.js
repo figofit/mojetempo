@@ -824,6 +824,11 @@ document.addEventListener('change',async event=>{
   }
 });
 document.addEventListener('submit',async event=>{
+  if(originalOlda&&event.target.id==='cooperation-form'){
+    event.preventDefault();const form=event.target,years=[...form.querySelectorAll('.cooperation-year-count')].map(input=>({year:Number(input.dataset.year),count:input.value===''?NaN:Number(input.value)}));
+    try{await persist(current=>({...current,settings:{...current.settings,trainingHistory:normalizeTrainingHistory({...current.settings.trainingHistory,cooperation:{certainty:'estimated',source:form.elements.source.value,years}})}}));settingsDirty=false;render();notify('Přibližné roky spolupráce jsou uložené. Tréninkové zápisy se nezměnily.');}
+    catch(error){form.querySelector('#cooperation-form-error').textContent=error.message;}return;
+  }
   if(originalOlda&&event.target.id==='history-form'){
     event.preventDefault();const form=event.target,values=Object.fromEntries(new FormData(form));
     const years=[...form.querySelectorAll('.history-year-count')].map(input=>({year:Number(input.dataset.year),count:input.value===''?NaN:Number(input.value)}));
@@ -880,7 +885,13 @@ document.addEventListener('click',event=>{
   try {if(typeof input.showPicker==='function')input.showPicker();else input.focus();}catch{input.focus();}
 });
 $('#exercise-search').addEventListener('input',event=>{exerciseQuery=event.target.value;renderExerciseLibrary();});
-document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form,#history-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
+document.addEventListener('input',event=>{if(event.target.closest('#settings-form,#rest-form,#history-form,#cooperation-form'))settingsDirty=true;if(event.target.closest('#plan-form,#rhythm-form'))planDirty=true;});
+document.addEventListener('input',event=>{
+  if(!event.target.matches('.cooperation-year-count'))return;
+  const form=event.target.closest('form'),counts=[...form.querySelectorAll('.cooperation-year-count')].map(input=>input.value===''?NaN:Number(input.value)),sum=counts.reduce((a,b)=>a+b,0),total=state.settings.trainingHistory.total;
+  form.querySelector('#cooperation-sum').textContent=(Number.isFinite(sum)?sum:'—')+' / '+total;
+  form.querySelector('button[type="submit"]').disabled=sum!==total||counts.some(n=>!Number.isSafeInteger(n)||n<0);
+});
 document.addEventListener('input',event=>{
   if(!event.target.matches('.history-year-count'))return;
   const form=event.target.closest('form'),counts=[...form.querySelectorAll('.history-year-count')].map(input=>input.value===''?NaN:Number(input.value)),sum=counts.reduce((a,b)=>a+b,0),total=state.settings.trainingHistory.total;

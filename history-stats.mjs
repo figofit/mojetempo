@@ -29,6 +29,24 @@ export function historicalTotals(state,today=localDate()) {
   return {history,series,total:history.total+added.length,newJoint:added.length,peak,peakYears:history.years.filter(row=>row.count===peak).map(row=>row.year),anchorMismatch:joint.needsAnchor||joint.anchored&&joint.count!==history.total+added.length};
 }
 
+/** Anniversary intervals use reconstructed aggregates, with only actual new joint entries appended. */
+export function cooperationYearTotals(state,today=localDate()) {
+  const history=normalizeTrainingHistory(state.settings.trainingHistory);if(!history)return null;
+  const first=calendarDay(history.startDate),last=today>history.through?today:history.through;
+  const anniversary=offset=>{const year=first.getFullYear()+offset,day=Math.min(first.getDate(),new Date(year,first.getMonth()+1,0).getDate());return localDate(new Date(year,first.getMonth(),day,12));};
+  const joint=jointTrainingHistory(state.entries,state.settings,new Date(today+'T12:00:00'));
+  const added=datedActivities(state,today).filter(e=>isJointTraining(e)&&(e.date>history.through||e.date===history.through&&joint.anchored&&joint.ordinals.get(e.id)>history.total));
+  const rows=[];let cumulative=0,knownCumulative=true;
+  for(let i=0;anniversary(i)<=last;i++){
+    const start=anniversary(i),end=shift(anniversary(i+1),-1),historical=start<=history.through;
+    const base=historical?(history.cooperation?.years.find(row=>row.year===i+1)?.count??null):0;
+    const fresh=added.filter(e=>e.date>=start&&e.date<=end).length,count=base==null?null:base+fresh;
+    if(count==null)knownCumulative=false;else cumulative+=count;
+    rows.push({year:i+1,start,end,base,added:fresh,count,cumulative:knownCumulative?cumulative:null,estimated:historical&&history.cooperation?.certainty==='estimated',ongoing:start<=today&&today<=end});
+  }
+  return {history,rows,total:history.total+added.length,source:history.cooperation?.source||''};
+}
+
 export function anniversaryInfo(history,today=localDate()) {
   const first=calendarDay(history.startDate),now=calendarDay(today);if(!first||!now)return null;
   const years=now.getFullYear()-first.getFullYear(),d=new Date(now.getFullYear(),first.getMonth(),1,12);

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeTrainingHistory} from '../history-model.mjs';
-import {historicalTotals,anniversaryInfo,consistencyWeek,consistencySeries,monthlyConsistency} from '../history-stats.mjs';
-import {renderHistoryDashboard,renderConsistencyDashboard,renderOverviewPulse} from '../history-dashboard.mjs';
+import {historicalTotals,cooperationYearTotals,anniversaryInfo,consistencyWeek,consistencySeries,monthlyConsistency} from '../history-stats.mjs';
+import {renderHistoryDashboard,renderConsistencyDashboard,renderOverviewPulse,renderCooperationYears} from '../history-dashboard.mjs';
 import {emptyDiary,mergeDiaries} from '../sync-rules.mjs';
 import {personalSettings} from '../personal.mjs';
 import {validateEntry,jointTrainingHistory} from '../domain.mjs';
@@ -20,6 +20,32 @@ function fixture(){
   state.settings.trainingHistory={startDate:'2024-11-09',startCertainty:'probable',through:'2026-11-04',total:12,coach:'Test coach',client:'Test client',source:'Reconstructed annual boundaries; verified overall running total.',years:[{year:2024,count:2},{year:2025,count:6},{year:2026,count:4}],highlights:[{id:'history-test-note',title:'Candidate month',summary:'Not an absolute record',detail:'Only a documented calendar checkpoint.',records:[{date:'2025-04-03',number:5}]}]};
   return state;
 }
+
+const withCooperation=()=>{const state=fixture();state.settings.trainingHistory.cooperation={certainty:'estimated',source:'Approximate anniversary distribution from calendar checkpoints.',years:[{year:1,count:7},{year:2,count:5}]};return state;};
+
+test('cooperation anniversaries run from 9 November through 8 November and keep calendar totals separate',()=>{
+ const state=withCooperation(),before=structuredClone(state),result=cooperationYearTotals(state,'2026-11-08');
+ assert.deepEqual(result.rows.map(row=>[row.start,row.end,row.count,row.cumulative]),[['2024-11-09','2025-11-08',7,7],['2025-11-09','2026-11-08',5,12]]);assert.equal(result.total,12);assert.ok(result.rows.every(row=>row.estimated));assert.deepEqual(state,before);
+ const html=renderCooperationYears(state,'2026-11-08');assert.ok(html.includes('cca 7'));assert.ok(html.includes('cca 5'));assert.ok(html.includes('1. rok spolupráce'));assert.ok(html.includes('nikoli přesná docházka'));
+ assert.deepEqual(historicalTotals(state).series.map(row=>row.count),[2,6,4]);
+});
+
+test('actual joint entries on 8 and 9 November enter different cooperation years without solo activity or anchor duplication',()=>{
+ const state=withCooperation();state.entries.push(entry({id:'last-day',date:'2026-11-08',type:'strength',together:true}),entry({id:'first-day',date:'2026-11-09',type:'strength',together:true}),entry({id:'solo',date:'2026-11-09',type:'strength'}));
+ const before=cooperationYearTotals(state,'2026-11-08');assert.equal(before.rows.length,2);assert.equal(before.total,13);assert.deepEqual(before.rows.map(row=>row.count),[7,6]);
+ const after=cooperationYearTotals(state,'2026-11-09');assert.deepEqual(after.rows.map(row=>row.count),[7,6,1]);assert.equal(after.total,14);assert.equal(after.rows[2].estimated,false);assert.equal(after.rows[2].cumulative,14);
+ assert.equal(cooperationYearTotals(state,'2027-01-01').rows.length,3);
+});
+
+test('missing anniversary reconstruction remains unknown and future empty years start at a real zero',()=>{
+ const state=fixture(),result=cooperationYearTotals(state,'2026-11-09');assert.deepEqual(result.rows.map(row=>row.count),[null,null,0]);assert.equal(result.rows[0].cumulative,null);assert.equal(result.total,12);assert.ok(renderCooperationYears(state,'2026-11-09').includes('Historický počet zatím není rozdělený'));
+});
+
+test('cooperation reconstruction validates coverage, source, certainty and sum without creating activities',()=>{
+ const state=withCooperation(),h=state.settings.trainingHistory;assert.deepEqual(normalizeTrainingHistory(h).cooperation,h.cooperation);
+ for(const changes of [{years:[{year:1,count:7}]},{years:[{year:1,count:7},{year:2,count:6}]},{years:[{year:1,count:-1},{year:2,count:13}]},{certainty:'exact-ish'},{source:''}])assert.throws(()=>normalizeTrainingHistory({...h,cooperation:{...h.cooperation,...changes}}));
+ const roundtrip=mergeDiaries(emptyDiary(),state,emptyDiary());assert.deepEqual(roundtrip.settings.trainingHistory.cooperation,h.cooperation);assert.equal(roundtrip.entries.length,2);
+});
 
 test('the opening overview shows real current and previous weeks, monthly counts and historical totals',()=>{
  const state=fixture();state.entries.push(entry({id:'friday',type:'strength',date:'2026-11-06'}),entry({id:'cardio-a',type:'boxing',date:'2026-11-02',datePrecision:'week'}),entry({id:'cardio-b',type:'tennis',date:'2026-11-02',datePrecision:'week'}));

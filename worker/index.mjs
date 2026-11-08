@@ -210,6 +210,8 @@ async function api(request,env) {
     // Installed older clients may edit an entry without knowing its newer fields.
     const previous=await db.prepare('SELECT revision,state FROM diaries WHERE account_id=?').bind(ownerId).first();
     if(previous.revision!==data.revision)fail(409,'Deník se mezitím změnil na jiném zařízení.');
+    const priorHistory=JSON.parse(previous.state).settings.trainingHistory,incomingHistory=data.state?.settings?.trainingHistory;
+    if(priorHistory?.cooperation&&incomingHistory&&typeof incomingHistory==='object'&&!Object.hasOwn(incomingHistory,'cooperation'))incomingHistory.cooperation=priorHistory.cooperation;
     const priorEntries=new Map(JSON.parse(previous.state).entries.map(entry=>[entry.id,entry]));
     for(const entry of Array.isArray(data.state?.entries)?data.state.entries:[]) {
       if(!entry||typeof entry!=='object')continue;

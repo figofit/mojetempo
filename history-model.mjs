@@ -12,6 +12,17 @@ export function normalizeTrainingHistory(input) {
     return {year:row.year,count:row.count};
   });
   if(years.reduce((sum,row)=>sum+row.count,0)!==input.total)throw new Error('Součet ročních údajů musí odpovídat ověřenému historickému celku.');
+  let cooperation=null;
+  if(input.cooperation!=null){
+    const value=input.cooperation,length=last-first+(input.through.slice(5)>=input.startDate.slice(5)?1:0);
+    if(!value||!['estimated','confirmed'].includes(value.certainty)||!text(value.source,4000)||!value.source.trim()||!Array.isArray(value.years)||value.years.length!==length)throw new Error('Roky spolupráce potřebují zdroj, přesnost a součet pro každé výroční období.');
+    const rows=[...value.years].sort((a,b)=>a.year-b.year).map((row,i)=>{
+      if(!row||row.year!==i+1||!Number.isSafeInteger(row.count)||row.count<0||row.count>1000000)throw new Error('Každý rok spolupráce potřebuje nezáporný celý počet.');
+      return {year:row.year,count:row.count};
+    });
+    if(rows.reduce((n,row)=>n+row.count,0)!==input.total)throw new Error('Součet roků spolupráce musí odpovídat historickému celku.');
+    cooperation={certainty:value.certainty,source:value.source,years:rows};
+  }
   const highlights=input.highlights??[];
   if(!Array.isArray(highlights)||highlights.length>12)throw new Error('Historie může obsahovat nejvýše 12 poznámek k doloženým údajům.');
   const ids=new Set();
@@ -24,5 +35,5 @@ export function normalizeTrainingHistory(input) {
     }).sort((a,b)=>a.date.localeCompare(b.date));
     return {id:note.id,title:note.title,summary:note.summary,detail:note.detail,records};
   });
-  return {startDate:input.startDate,startCertainty:input.startCertainty,through:input.through,total:input.total,coach:input.coach,client:input.client,source:input.source,years,highlights:notes};
+  return {startDate:input.startDate,startCertainty:input.startCertainty,through:input.through,total:input.total,coach:input.coach,client:input.client,source:input.source,years,highlights:notes,...(input.cooperation!==undefined?{cooperation}:{})};
 }
