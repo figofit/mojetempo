@@ -1,6 +1,6 @@
 import {siteAppearance,applyAppearance,renderOldaWelcome,renderOldaGift} from './appearance.mjs';
 import { ACTIVITY_TYPES, MODULES, DEFAULT_SETTINGS, WORKOUT_FOCUSES, MOVEMENT_PATTERNS, strengthTargets, librarySettings, exerciseLibrary, filterExercises, lastExerciseUse, computeStrengthStats, computeExerciseFrequency, workoutLabel, localDate, entryDateRange, validateEntry, computeStats, computeTrainingStats, jointTrainingHistory, chronicleGroups, isTraining, generateInsights, exportCSV, exportICS, createDemoEntries } from './domain.mjs';
-import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
+import { loadState, updateState, savePhoto, getPhoto, deletePhoto, initializeAccount, getAccount, onAccountChange, authenticate, logout, syncCloud, copyLocalToAccount, loadServerVersion, localRecoverySnapshots, loadAdminOverview, previewInvitation, acceptInvitation } from './storage.mjs';
 import {MOBILITY_EXERCISES,mobilityExerciseNames} from './mobility-catalog.mjs';
 import {scheduleSettings,activeRest,trainingAge,endRest} from './schedule-rules.mjs';
 import { renderInvitation } from './invitation.mjs';
@@ -70,6 +70,7 @@ let photoPreviewUrl;
 let renderRevision = 0;
 let photoUrls = [];
 let storageReady = false;
+let recoveryAvailable=false;
 let editingEntryId=null,authMode='login',settingsDirty=false,placeResults=[],placeSearchRevision=0;
 let strengthPeriod=originalOlda?'all':'week';
 let exerciseFilter='all', exerciseQuery='', planDirty=false;
@@ -309,7 +310,7 @@ function render() {
   const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary||getAccount().publicRead;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate)+renderHistoryTeaser(state)+renderTrainingSummary():'')+(allowed?renderToday():''):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate):''):renderers[currentView]();
   if(originalOlda&&allowed&&currentView==='overview')$('#view-content').insertAdjacentHTML('afterbegin',renderOverviewPulse(state));
   if(allowed&&(currentView==='stats'&&!(originalOlda&&state.settings.trainingHistory)||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings,{coached:coachingEnabled()}));
@@ -619,6 +620,7 @@ function renderAccountStatus() {
   $('#account-status').innerHTML=account.user?`<div class="account-status"><span>${icon('shield')}<strong>${esc(account.status)}</strong></span><button class="button ghost small" data-action="sync-account">Synchronizovat</button></div>`:'';
   if(originalOlda&&account.readOnly)$('#account-status').innerHTML=`<div class="account-status"><span>${icon('eye')}<strong>${esc(account.status)}</strong></span><button class="button ghost small" data-action="sync-account">Obnovit přehled</button></div>`;
   if(account.user)$('#account-status').insertAdjacentHTML('beforeend',`<div class="diary-context"><span>${account.scope==='olda'?'Oldův deník · '+(account.diary?.mode==='coach'?'společný zápis s Michalem':'osobní účet'):'Tvůj osobní deník'}</span>${!originalOlda&&account.diaries.some(d=>d.id==='olda'&&d.mode==='coach')?`<a class="button ghost small" href="${account.scope?'./':'?denik=olda'}">${account.scope?'Můj deník':'Oldův deník'}</a>`:''}<button class="button ghost small" data-action="logout-account">Odhlásit</button></div>`);
+  if(account.user&&recoveryAvailable)$('#account-status').insertAdjacentHTML('beforeend','<details class="diary-context"><summary>Místní záloha před obnovou</summary><button class="button ghost small" data-action="download-local-drafts">Stáhnout původní návrhy</button></details>');
 }
 async function refreshDiary() {
   state=(await loadState())||emptyDiary();
@@ -770,6 +772,8 @@ async function action(name,element) {
   if(name==='close-account')$('#account-dialog').close();
   if(name==='download-recovery')download($('#recovery-code').value,'moje-tempo-obnovovaci-klic.txt','text/plain');
   if(name==='sync-account'){await syncCloud();if(!$('#entry-dialog').open&&!settingsDirty&&!planDirty)await refreshDiary();}
+  if(name==='recover-diary'){await loadServerVersion({backup:true});recoveryAvailable=true;storageReady=true;await refreshDiary();notify('Načteno z účtu. Původní místní návrh zůstal uložený v záloze.');}
+  if(name==='download-local-drafts')download(JSON.stringify(await localRecoverySnapshots(),null,2),`itfit-mistni-navrhy-${localDate()}.json`,'application/json');
   if(name==='logout-account'){if(settingsDirty||planDirty)throw new Error('Nejdříve ulož rozepsané cíle.');await logout();syncChannel?.postMessage('account-changed');await refreshDiary();if(invitationCode){invitationData=await previewInvitation(invitationCode);if(currentView==='invite')render();}}
   if(name==='copy-local'&&confirm('Přidat kopii místního deníku do přihlášeného účtu? Původní deník zůstane na zařízení. Opakovaný převod vytvoří další kopie.')){await copyLocalToAccount();await refreshDiary();}
   if(name==='load-server'&&confirm('Nahradit neodeslané změny na tomto zařízení verzí z účtu? Nejdříve si stáhni celou zálohu.')){await loadServerVersion();await refreshDiary();}
@@ -931,10 +935,13 @@ if(syncChannel) syncChannel.onmessage=async(event)=>{
   } catch(error) {notify(error.message,true);}
 };
 
+// Updates must remain available even when an older cached diary cannot be opened.
+initializePWA({notify});
 try {
   await initializeAccount();
   const saved=await loadState();
   storageReady=true;
+  recoveryAvailable=(await localRecoverySnapshots()).length>0;
   if(saved) {
     const settings=validatedSettings(saved.settings);
     if(!Array.isArray(saved.entries)||saved.entries.some(entry=>!validateEntry(entry).valid||typeof entry.id!=='string')) throw new Error('Uložený deník má neplatný formát. Původní data nebyla přepsána.');
@@ -943,17 +950,18 @@ try {
   demo=!originalOlda&&!state.onboardingComplete&&state.entries.length===0;
   demoEntries=createDemoEntries();
   navigate(location.hash.slice(1));
-  initializePWA({notify});
-  onAccountChange(async account=>{
+
+} catch(error) {
+  storageReady=false;
+  $('#view-content').innerHTML=`<section class="panel diary-recovery" role="alert"><h1>Deník se nepodařilo otevřít.</h1><p>${esc(error.message||'Povol ukládání dat v prohlížeči a obnov stránku.')}</p><p>Původní data zůstala zachovaná. Nejdříve zkus načíst aktuální verzi aplikace.</p>${originalOlda?'<a class="button primary" href="/obnovit">Bezpečně načíst novou verzi</a>':''}${getAccount().user&&getAccount().diary?'<button class="button secondary" data-action="recover-diary">Načíst účet a zálohovat místní návrh</button>':''}</section>`;
+}
+
+onAccountChange(async account=>{
     renderAccountStatus();
     if(['Uloženo v účtu','Aktuální přehled','Offline · uložený přehled'].includes(account.status)&&!settingsDirty&&!planDirty&&!document.querySelector('dialog[open]')) {
       const saved=await loadState();if(saved&&(!same(saved,state)||renderedAccountRole!==account.user?.role)){state={...saved,settings:validatedSettings(saved.settings)};render();syncChannel?.postMessage('changed');}
     }
   });
-} catch(error) {
-  storageReady=false;
-  $('#view-content').innerHTML=`<section class="panel" role="alert"><h1>Deník se nepodařilo otevřít.</h1><p>${esc(error.message||'Povol ukládání dat v prohlížeči a obnov stránku.')}</p><p>Původní data jsme nepřepsali. Zkus stejný prohlížeč a stejnou adresu aplikace.</p></section>`;
-}
 
 // Refresh day-dependent routines when an installed app stays open overnight.
 function refreshCalendarDay(){if(storageReady&&renderedDate!==localDate()&&!settingsDirty&&!planDirty&&!document.querySelector('dialog[open]'))render();}

@@ -175,3 +175,9 @@ body:not(.olda-editing) .history-edit{display:none}
   .page-heading h1{font-size:28px;overflow-wrap:anywhere}.page-heading{gap:16px}
   .filter-row{max-width:100%}.filter-row .filter-chip{max-width:100%;white-space:normal}
 }
+
+/* Mobile repair overrides follow the original styles. */
+.olda-week-details,.olda-dedication{margin:0 0 18px}.olda-week-details>summary,.olda-dedication>summary{cursor:pointer;min-height:32px;font-size:16px;color:#e5eedb}.olda-week-content{margin-top:22px}.olda-week-content>.panel:last-child{margin-bottom:0}.olda-dedication>p{margin:18px 0;color:#bbcca9;font-size:14px;line-height:1.7}.olda-dedication .signature{margin-top:18px}.diary-recovery p{margin:16px 0}.diary-recovery .button{margin:8px 12px 0 0;white-space:normal}
+#olda-navigation,.sidebar .sidebar-bottom,.sidebar .nav a>span,#account-status,.diary-context{min-width:0}.sidebar .nav a>span{overflow-wrap:anywhere}.sidebar .nav-item.active:after{display:none}.diary-context>span{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}.diary-context .button{flex:0 0 auto}.olda-editing .diary-context:after{content:none}.account-status>span{min-width:0}.account-status strong{overflow-wrap:anywhere}
+@media(max-width:900px){#olda-navigation{width:100%;max-height:calc(100dvh - 90px);overflow-y:auto;overscroll-behavior:contain}.sidebar .nav a{max-width:100%;justify-content:flex-start}.sidebar .nav a svg{flex-shrink:0}.sidebar-bottom #settings-nav{max-width:100%;white-space:normal;justify-content:flex-start}.account-status>.button{flex-shrink:0}.diary-context{gap:8px}.dialog .auth-tabs{display:flex;flex-wrap:wrap}.dialog .auth-tabs>button{flex:1 1 90px;min-width:0;white-space:normal}}
+@media(max-width:420px){.sidebar .nav{grid-template-columns:minmax(0,1fr)}.olda-week-details,.olda-dedication{padding:18px}.account-status{align-items:flex-start}.account-status>span{flex:1 1 130px}.diary-context>span{flex-basis:150px}}

@@ -1,4 +1,5 @@
 import schema from '../migrations/0001_accounts.sql';
+import {recoveryPage} from './recovery.mjs';
 import { DEFAULT_SETTINGS, MODULES, validateEntry, strengthTargets, librarySettings } from '../domain.mjs';
 import { emptyDiary } from '../sync-rules.mjs';
 import { planningSettings } from '../planning.mjs';
@@ -266,6 +267,7 @@ export default {
       try{return await api(request,env);}
       catch(error){if(!(error instanceof APIError))console.error('Moje tempo API error',error?.name);return json({error:error instanceof APIError?error.message:'Server požadavek nedokončil. Tvoje místní data zůstávají uložená.'},error.status||503);}
     }
+    if(env.OLDA_DIARY==='olda'&&['/obnovit','/obnovit/'].includes(url.pathname)&&request.method==='GET')return recoveryPage();
     return env.ASSETS.fetch(request);
   },
 };

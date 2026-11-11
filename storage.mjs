@@ -1,6 +1,6 @@
 /** Local diary plus a separate, per-account offline cache and versioned cloud sync. */
 import * as local from './local-storage.mjs';
-import { emptyDiary, mergeDiaries, same } from './sync-rules.mjs';
+import { emptyDiary, mergeDiaries, same, accountRecordWithRecovery } from './sync-rules.mjs';
 
 const requestedDiary=new URL(location.href).searchParams.get('denik')||document.querySelector('meta[name="tempo-diary"]')?.content||'';
 const scope=requestedDiary==='olda'?'olda':'';
@@ -163,13 +163,17 @@ export async function copyLocalToAccount() {
   await updateState(current=>({...current,entries:[...current.entries,...newEntries],settings:current.entries.length?current.settings:diary.settings,onboardingComplete:true}));
   await syncCloud();
 }
-export async function loadServerVersion() {
-  if(!user)return;
-  const actual=(await api('session')).user;if(actual?.id!==user.id)throw new Error('Přihlas se znovu.');
+export async function loadServerVersion({backup=false}={}) {
+  if(!user)throw new Error('Pro načtení účtu se nejdříve přihlas.');
+  if(syncing)await syncing.catch(()=>{});
+  const owner=user.id;
+  const actual=(await api('session')).user;if(actual?.id!==owner)throw new Error('Přihlas se znovu.');
   const remote=await api('diary');
-  await local.setValue(key(user.id),{state:remote.state,base:remote.state,revision:remote.revision,dirty:false});
+  if(user?.id!==owner)throw new Error('Přihlášení se mezitím změnilo. Obnov stránku.');
+  await local.mutateValue(key(owner),current=>backup?accountRecordWithRecovery(current,remote):{state:remote.state,base:remote.state,revision:remote.revision,dirty:false,...(current?.localRecovery?{localRecovery:current.localRecovery}:{})});
   status='Uloženo v účtu';emit();
 }
+export async function localRecoverySnapshots(){return user?((await local.getValue(key(user.id)))?.localRecovery||[]):[];}
 window.addEventListener('online',()=>syncCloud().catch(()=>{}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncCloud().catch(()=>{});});
 setInterval(()=>{if((user||publicEnabled)&&!document.hidden&&navigator.onLine)syncCloud().catch(()=>{});},30000);

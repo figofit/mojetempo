@@ -65,3 +65,9 @@ export function mergeDiaries(base,local,remote) {
   Object.assign(settings,scheduleSettings(settings));
   return {version:1,entries,settings,onboardingComplete:local.onboardingComplete||remote.onboardingComplete};
 }
+/** Restore an account cache while retaining every prior local draft for recovery. */
+export function accountRecordWithRecovery(current,remote,capturedAt=new Date().toISOString()) {
+  if(!remote||!Number.isSafeInteger(remote.revision)||remote.revision<0||remote.state?.version!==1||!Array.isArray(remote.state.entries)||!remote.state.settings)throw new Error('Účet neposkytl platnou verzi deníku. Místní návrh zůstal zachovaný.');
+  const {localRecovery=[],...previous}=current||{};
+  return {state:remote.state,base:remote.state,revision:remote.revision,dirty:false,localRecovery:[...localRecovery,...(current?[{capturedAt,record:previous}]:[])]};
+}
