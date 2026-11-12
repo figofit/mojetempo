@@ -10,7 +10,7 @@ import { initializePWA, requestInstall, acceptUpdate } from './pwa.mjs';
 import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
 import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
-import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio,advanceRoutineReference} from './training-routine.mjs';
+import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio,advanceRoutineReference,cardioWeek} from './training-routine.mjs';
 import {renderHistoryTeaser,renderHistoryDashboard,renderConsistencyDashboard,renderOverviewPulse} from './history-dashboard.mjs';
 import {normalizeTrainingHistory} from './history-model.mjs';
 
@@ -60,6 +60,10 @@ const activityOn = type => moduleOn(type.category)||!!originalOlda&&type.id==='m
 const entries = () => demo ? demoEntries : state.entries;
 const views = {overview:'Přehled',plan:'Můj plán',diary:'Deník aktivit',chronicle:'Moje kronika',stats:'Statistiky',modules:'Moje moduly',settings:'Cíle a nastavení',invite:'Pozvánka'};
 const viewIcons = {overview:'grid',plan:'calendar',diary:'book',chronicle:'image',stats:'chart',modules:'layers'};
+// Olda's client has five tabs; plan, modules and settings live under "Více".
+if(originalOlda)views.more='Více';
+const viewLabel=view=>originalOlda?.labels?.[view]||views[view];
+let oldaStatsTab='year';
 let state = {version:1,entries:[],settings:{...DEFAULT_SETTINGS, modules:[...DEFAULT_SETTINGS.modules]},onboardingComplete:false};
 let demo = false;
 let demoEntries = [];
@@ -94,8 +98,8 @@ function notify(message, error = false) {
 }
 
 async function persist(update) {
-  if(originalOlda&&getAccount().readOnly)throw new Error('Pro zápis a úpravy se přihlas přes šipku vpravo dole.');
-  if(originalOlda&&!document.body.classList.contains('olda-editing'))throw new Error('Otevři společný zápis malou šipkou vpravo dole.');
+  if(originalOlda&&getAccount().readOnly)throw new Error('Pro zápis a úpravy se přihlas tlačítkem nahoře.');
+  if(originalOlda&&!document.body.classList.contains('olda-editing'))throw new Error('Zápis odemkneš tlačítkem „Jen čtení“ nahoře.');
   if (!storageReady) throw new Error('Úložiště není dostupné. Povol ukládání dat v prohlížeči a obnov stránku.');
   state = await updateState(current => update(current || {version:1,entries:[],settings:{...DEFAULT_SETTINGS,modules:[...DEFAULT_SETTINGS.modules]},onboardingComplete:false}));
   syncChannel?.postMessage('changed');
@@ -137,11 +141,12 @@ function activityRow(entry, removable = false) {
 
 function renderMobilityDetails(entry) {
   const names=mobilityExerciseNames(entry.mobilityExercises||[]);
+  if(originalOlda&&names.length)return `<div class="olda-chips olda-exercises">${names.map(name=>`<span class="olda-chip">${esc(name)}</span>`).join('')}</div>`;
   return names.length?`<details class="workout-details"><summary>Mobilita · ${names.length} cviků</summary><ul>${names.map(name=>`<li>${esc(name)}</li>`).join('')}</ul></details>`:'';
 }
 
 function renderWorkoutDetails(workout) {
-  if(originalOlda)return `<details class="workout-details"><summary>Cviky · ${workout.exercises.length}</summary><ul>${workout.exercises.map(exercise=>`<li><strong>${esc(exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik')}</strong> · ${esc(MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Ostatní')}</li>`).join('')}</ul></details>`;
+  if(originalOlda)return workout.exercises.length?`<div class="olda-chips olda-exercises">${workout.exercises.map(exercise=>`<span class="olda-chip" title="${esc(MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Ostatní')}">${esc(exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik')}</span>`).join('')}</div>`:'';
   const total=workout.exercises.reduce((sum,exercise)=>sum+exercise.sets,0);
   return `<details class="workout-details"><summary>${esc(workoutLabel(workout))} · ${total} pracovních sérií</summary><ul>${workout.exercises.map(exercise=>`<li><strong>${esc(exercise.name||MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||'Cvik')}</strong> · ${exercise.setsUnknown?'—':exercise.sets} sérií${exercise.reps!=null?' × '+exercise.reps+' opak.':''}${exercise.weight!=null?' · '+exercise.weight+' kg':''}${exercise.name?' · '+esc(MOVEMENT_PATTERNS.find(pattern=>pattern.id===exercise.pattern)?.short||''):''}</li>`).join('')}</ul>${!total?'<small>Cviky zatím nejsou vyplněné.</small>':''}</details>`;
 }
@@ -201,7 +206,7 @@ function renderOverview(stats) {
 function renderDiary(stats) {
   const filtered=stats.recentEntries.filter(entry=>activityFilter==='all'||entry.type===activityFilter);
   const available=ACTIVITY_TYPES.filter(type=>activityOn(type));
-  return `${heading('Deník aktivit', 'Všechno, co děláš pro sebe, na jednom místě.')}<div class="filter-row"><button class="filter-chip ${activityFilter==='all'?'active':''}" data-filter="all">Všechny aktivity</button>${available.map(type=>`<button class="filter-chip ${activityFilter===type.id?'active':''}" data-filter="${type.id}">${icon(type.icon)}${esc(type.label)}</button>`).join('')}</div><section class="panel"><div class="panel-header"><h2 class="panel-title">${filtered.length} ${filtered.length===1?'záznam':'záznamů'}</h2><div class="activity-actions"><button class="button ghost small" data-action="csv">${icon('download')}CSV</button><button class="button ghost small" data-action="ics">${icon('calendar')}Do kalendáře</button></div></div><div class="activity-list">${filtered.length?filtered.map(entry=>activityRow(entry,true)).join(''):empty('Zatím tu není žádný zápis.')}</div></section>`;
+  return `${originalOlda?heading('Zápisy','Každý řádek je skutečný pohyb. Cviky vidíš rovnou.'):heading('Deník aktivit', 'Všechno, co děláš pro sebe, na jednom místě.')}<div class="filter-row"><button class="filter-chip ${activityFilter==='all'?'active':''}" data-filter="all">Všechny aktivity</button>${available.map(type=>`<button class="filter-chip ${activityFilter===type.id?'active':''}" data-filter="${type.id}">${icon(type.icon)}${esc(type.label)}</button>`).join('')}</div><section class="panel"><div class="panel-header"><h2 class="panel-title">${filtered.length} ${filtered.length===1?'záznam':'záznamů'}</h2><div class="activity-actions"><button class="button ghost small" data-action="csv">${icon('download')}CSV</button><button class="button ghost small" data-action="ics">${icon('calendar')}Do kalendáře</button></div></div><div class="activity-list">${filtered.length?filtered.map(entry=>activityRow(entry,true)).join(''):empty('Zatím tu není žádný zápis.')}</div></section>`;
 }
 
 function renderChronicle(stats) {
@@ -220,7 +225,11 @@ function renderTrainingSummary() {
 }
 
 function renderStats(stats) {
-  if(originalOlda&&state.settings.trainingHistory)return `${heading('Náš příběh. Tvoje konzistence.','Historie spolupráce a nová evidence skutečně zapsaných aktivit.','<a class="button secondary" href="#overview">Zpět na odškrtávání</a>')}${renderHistoryDashboard(state)}${renderConsistencyDashboard(state,consistencyMonth)}${moduleOn('movement')?renderStrength():''}<details class="panel history-extra-stats"><summary>Další pohybové statistiky a cviky</summary>${renderStatsDetails(stats)}</details>`;
+  if(originalOlda&&state.settings.trainingHistory){
+    const tab=(id,label)=>`<button role="tab" class="olda-tab" aria-selected="${oldaStatsTab===id}" data-action="olda-stats-tab" data-tab="${id}">${label}</button>`;
+    const body=oldaStatsTab==='all'?renderHistoryDashboard(state):oldaStatsTab==='ex'?(moduleOn('movement')?renderStrength():'')+renderStatsDetails(stats):renderConsistencyDashboard(state,consistencyMonth);
+    return `<div class="olda-hello"><p class="eyebrow">MICHAL × OLDA</p><h1>Náš příběh.<br>Tvoje konzistence.</h1></div><div class="olda-segment" role="tablist" aria-label="Pokrok">${tab('year','Letos')}${tab('all','Celá historie')}${tab('ex','Cviky')}</div><div class="olda-stats olda-stats-${oldaStatsTab}">${body}</div>`;
+  }
   return renderStatsDetails(stats);
 }
 function renderStatsDetails(stats) {
@@ -299,25 +308,55 @@ function render() {
   photoUrls.forEach(url=>URL.revokeObjectURL(url));photoUrls=[];
   const revision=++renderRevision;
   const stats=computeStats(visibleEntries(),state.settings);
-  $('#main-nav').innerHTML=Object.entries(viewIcons).map(([view,symbol])=>`<a href="#${view}" class="nav-item ${currentView===view?'active':''}" ${currentView===view?'aria-current="page"':''}>${icon(symbol)}<span>${originalOlda?.labels?.[view]||views[view]}</span>${view==='diary'?`<small class="nav-count">${visibleEntries().length}</small>`:''}</a>`).join('');
+  const navActive=view=>currentView===view||!!originalOlda&&view==='more'&&['plan','modules','settings'].includes(currentView);
+  $('#main-nav').innerHTML=Object.entries(originalOlda?.nav||viewIcons).map(([view,symbol])=>`<a href="#${view}" class="nav-item ${navActive(view)?'active':''}" ${navActive(view)?'aria-current="page"':''}>${icon(symbol)}<span>${viewLabel(view)}</span>${view==='diary'&&!originalOlda?`<small class="nav-count">${visibleEntries().length}</small>`:''}</a>`).join('');
   $('#settings-nav').innerHTML=icon('settings')+'Cíle a nastavení';
   $('#settings-nav').classList.toggle('active',currentView==='settings');
   $('#demo-toggle').innerHTML=icon('eye')+(demo?'Zpět do mého deníku':'Prohlédnout ukázku');
   $('#privacy-label').innerHTML=icon('shield')+(originalOlda?'Oldův prostor':'Jen pro tebe');
   $('.sidebar-profile strong').textContent=originalOlda?'Olda 4.0':state.settings.name||'Moje tempo';
-  $('#breadcrumb-current').textContent=views[currentView];
+  $('#breadcrumb-current').textContent=viewLabel(currentView);
   $('#demo-banner').innerHTML=demo?'<div class="demo-banner"><div><strong>Prohlížíš ukázkový deník.</strong> Tyto aktivity jsou pouze ilustrační.</div><button class="button small secondary" data-action="start-own">Začít vlastní deník '+icon('arrow')+'</button></div>':'';
-  const renderers={overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
+  const renderers={more:()=>originalOlda.more(state,getAccount(),{icon}),overview:()=>renderOverview(stats),plan:renderPlan,diary:()=>renderDiary(stats),chronicle:()=>renderChronicle(stats),stats:()=>renderStats(stats),modules:renderModules,settings:renderSettings,invite:()=>renderInvitation(invitationData,getAccount().user,invitationError)};
   const allowed=!originalOlda||!!getAccount().diary||getAccount().publicRead;
   $('#view-content').classList.toggle('original-home',!!originalOlda&&(currentView==='overview'||!allowed));
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?renderTrainingRoutine(state,routineReference)+renderCardioRoutine(state,routineReference,cardioDate):''):renderers[currentView]();
-  if(originalOlda&&allowed&&currentView==='overview')$('#view-content').insertAdjacentHTML('afterbegin',renderOverviewPulse(state));
+  const signedIn=!!getAccount().diary,canWrite=signedIn&&document.body.classList.contains('olda-editing');
+  if(originalOlda){
+    document.body.dataset.oldaView=currentView;
+    document.body.classList.toggle('olda-editing',canWrite);
+    const mode=document.querySelector('.olda-mode');
+    if(mode){mode.classList.toggle('is-on',canWrite);mode.setAttribute('aria-pressed',String(canWrite));mode.querySelector('.olda-mode-label').textContent=canWrite?'Zapisujeme spolu':signedIn?'Jen čtení':'Přihlásit k zápisu';}
+  }
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?{week:trainingRoutineWeek(state,routineReference),cardio:cardioWeek(state,routineReference),pulse:renderOverviewPulse(state),today:localDate(),signedIn,canWrite,icon}:{}):renderers[currentView]();
+  if(originalOlda)flattenOldaDetails($('#view-content'));
   if(allowed&&(currentView==='stats'&&!(originalOlda&&state.settings.trainingHistory)||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings,{coached:coachingEnabled()}));
   renderAccountStatus();
   renderedAccountRole=getAccount().user?.role;renderedDate=localDate();
-  document.title=`${views[currentView]} · ${appearance.title}`;
+  document.title=`${viewLabel(currentView)} · ${appearance.title}`;
   hydratePhotos(revision);
+}
+
+let oldaSheetId=0;
+function flattenOldaDetails(root) {
+  for(const details of [...root.querySelectorAll('details')]) {
+    if(details.closest('.olda-sheet'))continue;
+    const summary=details.querySelector(':scope>summary');
+    if(!summary)continue;
+    // A list of ordinary entries reads better as a plain section.
+    if(details.classList.contains('chronicle-routine')||/^Běžné zápisy/.test(summary.textContent.trim())){details.open=true;details.classList.add('olda-open');continue;}
+    const id=`olda-sheet-${++oldaSheetId}`,edits=!!details.querySelector('form,input,select,textarea');
+    const button=document.createElement('button');
+    button.type='button';button.className='olda-sheet-button'+(edits?' is-edit':'');button.setAttribute('popovertarget',id);
+    button.innerHTML=`<span>${esc(summary.textContent.trim())}</span><span aria-hidden="true">${edits?'✎':'ⓘ'}</span>`;
+    const sheet=document.createElement('div');
+    sheet.id=id;sheet.className='olda-sheet '+details.className;sheet.setAttribute('popover','');
+    sheet.innerHTML=`<h2>${esc(summary.textContent.trim())}</h2>`;
+    summary.remove();
+    sheet.append(...details.childNodes);
+    sheet.insertAdjacentHTML('beforeend',`<button type="button" class="button secondary" popovertarget="${id}" popovertargetaction="hide">Zavřít</button>`);
+    details.replaceWith(button,sheet);
+  }
 }
 
 function navigate(view) {
@@ -707,6 +746,7 @@ async function importBackup(file) {
 }
 
 async function action(name,element) {
+  if(originalOlda&&name==='olda-stats-tab'){oldaStatsTab=element.dataset.tab;render();return;}
   if(originalOlda&&name==='consistency-week'){routineReference=new Date(element.dataset.week+'T12:00:00');cardioDate='';location.hash='overview';if(currentView==='overview')render();return;}
   if(originalOlda&&['routine-prev','routine-next','routine-today'].includes(name)){
     cardioDate='';
@@ -787,6 +827,7 @@ async function action(name,element) {
   if(name==='import') {$('#import-file').value='';$('#import-file').click();}
 }
 
+if(originalOlda)window.addEventListener('olda-editing',()=>render());
 document.addEventListener('click',event=>{
   const oldPage=event.target.closest('[data-page]');if(originalOlda&&oldPage){location.hash=originalOlda.routes[oldPage.dataset.page]||'overview';return;}
   const exerciseFilterButton=event.target.closest('[data-exercise-filter]');if(exerciseFilterButton){exerciseFilter=exerciseFilterButton.dataset.exerciseFilter;renderExerciseLibrary();return;}

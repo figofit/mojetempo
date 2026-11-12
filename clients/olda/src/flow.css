@@ -1,0 +1,160 @@
+/* Olda 4.0 · jasný průchod (2026-11): pět záložek, týden nahoře, sheety místo akordeonů. Načítá se jako poslední. */
+:root{--cardio:#8fd3ff;--no:#f2a58e;--raised:#212a1b;--line-strong:#3e4a33}
+.olda-topbrand{display:none}
+.olda-mode{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border:1px solid var(--line-strong);border-radius:99px;font-size:13px;font-weight:650;color:var(--muted);background:transparent;cursor:pointer}
+.olda-mode .olda-dot{width:8px;height:8px;border-radius:50%;background:#6f7a66}
+.olda-mode.is-on{border-color:var(--lime);color:var(--lime);background:rgba(215,248,120,.1)}
+.olda-mode.is-on .olda-dot{background:var(--lime);box-shadow:0 0 0 4px rgba(215,248,120,.18)}
+.olda-fab{display:none;position:fixed;z-index:30;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(28px + env(safe-area-inset-bottom,0px));align-items:center;gap:8px;min-height:54px;padding:0 22px;border:0;border-radius:18px;background:var(--lime);color:#1c2510;font-weight:800;font-size:16px;box-shadow:0 12px 32px rgba(0,0,0,.45);cursor:pointer}
+.olda-fab span:first-child{font-size:22px;line-height:1}
+body.olda-editing:is([data-olda-view="diary"],[data-olda-view="chronicle"]) .olda-fab{display:inline-flex}
+.olda-add-other{justify-self:start}
+/* Account and sync status: one quiet line, full detail under Více. */
+body[data-olda-view]:not([data-olda-view="more"]):not([data-olda-view="settings"]) .diary-context{display:none}
+body[data-olda-view]:not([data-olda-view="more"]):not([data-olda-view="settings"]) .account-status{padding:6px 2px;margin:0 0 8px;border:0;background:transparent;font-size:12.5px;color:var(--muted)}
+body[data-olda-view]:not([data-olda-view="more"]):not([data-olda-view="settings"]) .account-status svg{width:15px;height:15px}
+body[data-olda-view]:not([data-olda-view="more"]):not([data-olda-view="settings"]) .account-status strong{font-weight:600}
+body[data-olda-view]:not([data-olda-view="more"]):not([data-olda-view="settings"]) .account-status .button{min-height:30px;padding:0 10px;font-size:12px}
+#view-content .overview-pulse .pulse-grid>:first-child{display:none}
+body[data-olda-view="diary"] .filter-row{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+body[data-olda-view="diary"] .filter-row::-webkit-scrollbar{display:none}
+body[data-olda-view="diary"] .filter-chip{flex:none}
+#view-content .page-heading .heading-actions [data-action="add"]{display:none}
+
+.olda-hello{display:grid;gap:6px;margin:4px 0 22px}
+.olda-hello h1{font-size:clamp(30px,6vw,44px);line-height:1.06;letter-spacing:-.035em;font-weight:800;text-wrap:balance}
+.olda-hello .eyebrow{color:var(--muted)}
+.olda-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;margin-bottom:16px}
+.olda-hint{color:var(--muted);font-size:13px;line-height:1.5}
+.olda-link{color:var(--lime);font-weight:650;font-size:13px;padding:4px 2px;background:none;border:0;cursor:pointer}
+.olda-chips{display:flex;flex-wrap:wrap;gap:6px}
+.olda-chip{display:inline-flex;align-items:center;padding:5px 10px;border-radius:99px;background:var(--raised);border:1px solid var(--line);font-size:12.5px;color:#e5edd8;white-space:nowrap}
+.olda-exercises{margin-top:8px}
+
+.olda-ask{display:grid;gap:12px;padding:22px;margin-bottom:16px;border-radius:22px;border:1px solid #4a5d34;background:linear-gradient(160deg,#25321b,#1a2115 62%)}
+.olda-ask.is-calm{background:var(--surface);border-color:var(--line)}
+.olda-ask h2{font-size:clamp(22px,4.5vw,28px);line-height:1.15;letter-spacing:-.02em;text-wrap:balance}
+.olda-ask-sub{color:#c6d3b4;font-size:14px}
+.olda-answer{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.olda-answer .button{min-height:54px;font-size:16px;justify-content:center}
+.olda-readnote{display:flex;gap:10px;align-items:flex-start;color:#c6d3b4;font-size:14px;background:rgba(0,0,0,.22);border-radius:14px;padding:12px 14px}
+.olda-readnote svg{flex:none;width:20px;height:20px}
+
+.olda-week{display:grid;gap:16px}
+.olda-week-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.olda-week-head h2{font-size:19px}
+.olda-week-nav{display:flex;align-items:center;gap:6px}
+.olda-round{width:34px;height:34px;border-radius:50%;border:1px solid var(--line-strong);background:transparent;color:var(--ink);font-size:18px;line-height:1;cursor:pointer}
+.olda-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.olda-day{display:grid;justify-items:center;align-content:start;gap:5px;padding:9px 0 11px;border-radius:14px;border:1px solid transparent;font-size:12px;color:var(--muted)}
+.olda-day b{font-size:17px;color:var(--ink)}
+.olda-day.is-today{border-color:var(--line-strong);background:#141a10}
+.olda-pip{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:14px;font-weight:800}
+.olda-pip.is-empty{visibility:hidden}
+.olda-pip.is-plan{border:1.5px solid var(--lime)}
+.olda-pip.is-yes{background:var(--lime);color:#1c2510}
+.olda-pip.is-no{border:1.5px solid var(--no);color:var(--no);background:rgba(242,165,142,.12)}
+.olda-pip.is-cardio{width:22px;height:22px;font-size:12px;background:var(--cardio);color:#0d2230}
+.olda-slots{display:grid;gap:8px}
+.olda-slot{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#141a10;border:1px solid var(--line)}
+.olda-when{font-weight:700;font-size:14px;white-space:nowrap;min-width:70px}
+.olda-what{min-width:0}
+.olda-what small{display:block;color:var(--muted);font-size:12.5px}
+.olda-state{font-size:12px;font-weight:700;padding:4px 9px;border-radius:99px;white-space:nowrap;background:var(--raised);color:var(--muted)}
+.olda-state.is-yes{background:rgba(215,248,120,.13);color:var(--lime)}
+.olda-state.is-no{background:rgba(242,165,142,.12);color:var(--no)}
+.olda-state.is-next{background:transparent;border:1px dashed var(--line-strong)}
+.olda-cardio{display:grid;gap:10px;padding-top:14px;border-top:1px solid var(--line)}
+.olda-cardio-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;color:#c6d3b4}
+.olda-cardio-add{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.olda-select{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.olda-select select{min-height:38px;border-radius:11px;padding:0 10px;background:#10150d;color:var(--ink);border:1px solid var(--line-strong)}
+
+.olda-meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+.olda-meter{display:grid;gap:10px;padding:18px;border-radius:18px;background:var(--surface);border:1px solid var(--line)}
+.olda-meter>div{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
+.olda-meter>div svg{width:20px;height:20px}
+.olda-meter.is-cardio>div svg{color:var(--cardio)}
+.olda-meter strong{font-size:30px;font-weight:800;letter-spacing:-.02em}
+.olda-meter strong small{font-size:15px;color:var(--muted);font-weight:600}
+.olda-bar{display:flex;gap:3px;height:8px}
+.olda-bar i{flex:1;border-radius:99px;background:var(--raised)}
+.olda-bar i.is-full{background:var(--lime)}
+.olda-bar.is-cardio i.is-full{background:var(--cardio)}
+#view-content .overview-pulse{margin:0 0 18px}
+#view-content .overview-pulse .pulse-heading h1{font-size:19px;letter-spacing:-.01em}
+
+.olda-letter{display:flex;gap:14px;align-items:center;width:100%;padding:16px 18px;border-radius:18px;border:1px dashed #4a5d34;background:transparent;color:var(--ink);text-align:left;cursor:pointer;margin-bottom:10px;font:inherit}
+.olda-letter small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
+.olda-seal{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--lime);color:#1c2510;font-weight:900}
+.olda-letter-body{font-size:18px;line-height:1.6;color:#e5edd8;max-width:52ch;white-space:pre-wrap}
+
+/* Sheets replace fold-outs. */
+.olda-sheet{width:min(620px,calc(100% - 24px));max-height:min(86dvh,900px);overflow:auto;margin:auto;padding:22px;border-radius:22px;border:1px solid var(--line-strong);background:#161b12;color:var(--ink);gap:14px}
+.olda-sheet:popover-open{display:grid}
+.olda-sheet::backdrop{background:rgba(5,7,4,.62)}
+.olda-sheet>h2{font-size:21px;letter-spacing:-.01em}
+.olda-sheet>.button:last-child{justify-self:start}
+.olda-sheet-button{display:inline-flex;align-items:center;gap:10px;margin:6px 8px 10px 0;padding:9px 14px;border-radius:12px;border:1px solid var(--line-strong);background:transparent;color:#c6d3b4;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.olda-sheet-button span:last-child{color:var(--muted)}
+body:not(.olda-editing) .olda-sheet-button.is-edit{display:none}
+details.olda-open>summary{list-style:none;pointer-events:none;font-weight:700;font-size:17px;margin-bottom:8px}
+details.olda-open>summary::-webkit-details-marker{display:none}
+
+/* Pokrok */
+.olda-segment{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;margin-bottom:18px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.olda-tab{padding:11px 6px;border-radius:10px;border:0;background:transparent;color:var(--muted);font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+.olda-tab[aria-selected="true"]{background:var(--raised);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.olda-stats .page-heading .heading-actions{display:none}
+
+/* Více */
+.olda-list{display:grid;margin-bottom:16px;border-radius:18px;overflow:hidden;background:var(--surface);border:1px solid var(--line)}
+.olda-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;padding:14px 16px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);text-align:left;font:inherit;font-weight:600;cursor:pointer}
+.olda-row:last-child{border-bottom:0}
+.olda-row small{display:block;color:var(--muted);font-weight:400;font-size:12.5px}
+.olda-row-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--raised);color:var(--lime)}
+.olda-chev{color:#6f7a66;font-size:20px}
+
+/* Zápis krok za krokem */
+.olda-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.olda-steps button{display:grid;gap:6px;padding:0;border:0;background:none;color:var(--muted);font-size:12px;font-weight:650;text-align:left;cursor:pointer;font-family:inherit}
+.olda-steps i{height:4px;border-radius:9px;background:var(--line)}
+.olda-steps button.is-on{color:var(--ink)}
+.olda-steps button.is-on i{background:var(--lime)}
+.olda-kinds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.olda-kinds button{min-height:64px;padding:14px 16px;border-radius:16px;border:1px solid var(--line-strong);background:#141a10;color:var(--ink);font-weight:700;font-size:15px;text-align:left;cursor:pointer;font-family:inherit}
+.olda-kinds button[aria-pressed="true"]{border-color:var(--lime);background:rgba(215,248,120,.1)}
+#entry-form[data-step="1"]>:not(.olda-steps):not(.olda-kinds):not(.form-actions):not(.form-error){display:none}
+#entry-form[data-step="1"] .form-actions>:not([data-action="close-entry"]){display:none}
+#entry-form:not([data-step="1"]) .olda-kinds{display:none}
+#entry-form[data-step="2"]>#entry-details{display:none}
+#entry-form[data-step="2"] .form-field:has(#entry-type){display:none}
+#entry-form[data-step="3"]>:not(.olda-steps):not(#entry-details):not(.form-actions):not(.form-error){display:none}
+#entry-form[data-step="3"]>#entry-details>summary{display:none}
+#entry-form[data-step="3"] .olda-more{display:none}
+#entry-form[data-step]:not([data-step="1"]) .form-actions [data-action="close-entry"]{display:none}
+#entry-form .exercise-library>summary,#mobility-fields>details>summary{display:none}
+
+@media(max-width:900px){
+  .sidebar{display:contents}
+  .sidebar>.brand,.sidebar-label,.sidebar-bottom{display:none}
+  #main-nav{position:fixed;z-index:25;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0;padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px));background:rgba(17,20,15,.95);backdrop-filter:blur(12px);border-top:1px solid var(--line);overflow:visible}
+  #main-nav .nav-item{display:grid;justify-items:center;gap:3px;padding:7px 2px;border:0;border-radius:12px;font-size:11px;font-weight:650;color:var(--muted);background:transparent;white-space:nowrap;max-width:none;box-shadow:none}
+  #main-nav .nav-item svg{display:block;width:22px;height:22px}
+  #main-nav .nav-item.active{background:transparent;color:var(--lime)}
+  .topbar{min-height:64px;flex-wrap:nowrap}
+  .topbar .crumb{display:none}
+  .olda-topbrand{display:flex;font-size:22px}
+  .olda-topbrand .mark{width:22px;height:22px}
+  .main-wrap{padding-bottom:96px}
+  .footer{display:none}
+  .olda-fab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .olda-sheet{width:100%;max-width:none;margin:auto 0 0;border-radius:22px 22px 0 0;max-height:88dvh;padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:420px){
+  .olda-slot{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 12px;gap:10px}
+  .olda-slot .olda-link{grid-column:2/-1;justify-self:start;padding:0}
+  .olda-when{min-width:0}
+  .olda-ask{padding:18px}
+  .olda-card{padding:16px}
+}

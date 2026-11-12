@@ -21,7 +21,7 @@ export async function buildOlda({root=path.join(repoRoot,'clients/olda'),output=
   const safe=value=>JSON.stringify(value).replaceAll('<','\\u003c');
   const dialogs=fs.readFileSync(path.join(source,'index.html'),'utf8').split('    <dialog id="entry-dialog"')[1].split('    <div id="toast"')[0];
   let html=read('index.html');
-  const css=fs.readFileSync(path.join(source,'styles.css'),'utf8')+'\n'+read('styles.css')+'\n'+read('cloud.css')+'\n'+read('shared.css');
+  const css=fs.readFileSync(path.join(source,'styles.css'),'utf8')+'\n'+read('styles.css')+'\n'+read('cloud.css')+'\n'+read('shared.css')+'\n'+read('flow.css');
   const values={'/*__CSS__*/':css,'/*__DATA__*/':safe(seed),'/*__ASSETS__*/':'{}','/*__CONFIG__*/':'{"mode":"shared"}','/*__CORE__*/':read('core.js'),'/*__CLOUD__*/':read('cloud.js'),'/*__APP__*/':read('app.js')};
   for(const [key,value] of Object.entries(values))html=html.replace(key,()=>value);
   html=html.replace('</head>','<meta name="tempo-diary" content="olda"><meta name="tempo-build" content="__TEMPO_VERSION__"><link rel="stylesheet" href="./vendor/leaflet/leaflet.css"></head>');
