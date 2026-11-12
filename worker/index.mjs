@@ -137,7 +137,7 @@ async function api(request,env) {
   if(path==='/api/invitation/preview'&&method==='POST') {
     await rate(db,request,'invitation-preview','',30);
     const {code}=await body(request);
-    const {invitation,claim}=await invitationFor(code,{db,digest,fail});
+    const {invitation,claim}=await invitationFor(code,{db,digest,fail,secret:env.ITFIT_HANDOFF_SECRET});
     return json(publicInvitation(invitation,claim,await session(db,request)));
   }
   if(['/api/register','/api/login','/api/recover'].includes(path)&&method==='POST') {
@@ -175,7 +175,7 @@ async function api(request,env) {
     if(accountRole(account,env)==='admin')fail(403,'Tuto pozvánku přijmi v osobním účtu pozvaného člověka, nikoliv v účtu správce.');
     await rate(db,request,'invitation-accept',account.id,12);
     const {code}=await body(request);
-    const {invitation,claim}=await invitationFor(code,{db,digest,fail});
+    const {invitation,claim}=await invitationFor(code,{db,digest,fail,secret:env.ITFIT_HANDOFF_SECRET});
     return json(await applyInvitation(db,account,invitation,claim,{validateState,fail}));
   }
   if(path==='/api/admin/overview'&&method==='GET') {

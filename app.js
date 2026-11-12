@@ -321,7 +321,7 @@ function render() {
 }
 
 function navigate(view) {
-  const incoming=/^pozvanka=([A-Za-z0-9_-]{43})$/.exec(view);
+  const incoming=/^pozvanka=([A-Za-z0-9_-]{43}|i1\.[A-Za-z0-9_-]{20,1200}\.[A-Za-z0-9_-]{43})$/.exec(view);
   if(incoming) {
     currentView='invite';settingsDirty=false;planDirty=false;invitationCode=incoming[1];invitationData=null;invitationError='';
     const revision=++invitationRevision;render();

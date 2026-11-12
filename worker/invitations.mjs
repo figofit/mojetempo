@@ -2,7 +2,31 @@ import configuration from '../invitations.config.json' with {type:'json'};
 import {DEFAULT_SETTINGS,validateEntry} from '../domain.mjs';
 const bytes=value=>Uint8Array.from(atob(value),char=>char.charCodeAt(0));
 
-export async function invitationFor(code,{db,digest,fail,now=Date.now()}) {
+const b64url=value=>Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),char=>char.charCodeAt(0));
+const HANDOFF=/^i1\.([A-Za-z0-9_-]{20,1200})\.([A-Za-z0-9_-]{43})$/;
+
+/** A signed hand-off from Moje ITfit. The WordPress plugin and this Worker share one secret; nothing is stored in Git. */
+export async function handoffInvitation(code,secret,now=Date.now()) {
+  const match=typeof code==='string'?HANDOFF.exec(code):null;
+  if(!match||typeof secret!=='string'||secret.length<32)return null;
+  let payload;
+  try {
+    const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['verify']);
+    if(!await crypto.subtle.verify('HMAC',key,b64url(match[2]),new TextEncoder().encode('i1.'+match[1])))return null;
+    payload=JSON.parse(new TextDecoder().decode(b64url(match[1])));
+  }catch{return null;}
+  if(!payload||!/^[a-f0-9]{32}$/.test(payload.id||'')||typeof payload.name!=='string'||!payload.name.trim()||payload.name.length>80||typeof payload.milestone?.date!=='string'||typeof payload.milestone?.title!=='string'||!payload.milestone.title.trim()||payload.milestone.title.length>120||!Number.isFinite(payload.exp))return null;
+  return {id:'itfit-'+payload.id,expiresAt:new Date(payload.exp*1000).toISOString(),expired:payload.exp*1000<now,name:payload.name.trim(),milestone:{date:payload.milestone.date,title:payload.milestone.title.trim(),note:String(payload.milestone.note??'').slice(0,300)}};
+}
+
+export async function invitationFor(code,{db,digest,fail,secret,now=Date.now()}) {
+  if(typeof code==='string'&&code.startsWith('i1.')) {
+    const invitation=await handoffInvitation(code,secret,now);
+    if(!invitation)fail(404,'Odkaz z Moje ITfit není platný. Otevři ho ve svém vaultu znovu.');
+    if(invitation.expired)fail(410,'Platnost odkazu skončila. Otevři ho ve svém vaultu znovu.');
+    const claim=await db.prepare('SELECT account_id,applied_at FROM invitation_claims WHERE invitation_id=?').bind(invitation.id).first();
+    return {invitation,claim};
+  }
   if(typeof code!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(code))fail(404,'Pozvánka není platná.');
   const hash=await digest(code),record=configuration.find(item=>item.tokenHash===hash);
   if(!record)fail(404,'Pozvánka není platná.');

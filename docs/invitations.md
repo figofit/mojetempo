@@ -32,3 +32,18 @@ Samostatný test `python3 tests/invitation_smoke.py` spouští skutečný lokál
 Pages runtime a D1 s testovací pozvánkou. Nevytváří produkční účty a nepoužívá
 živý soukromý kód. Prodejní balíček IT FIT Vault + osobní deník lze doplnit
 samostatným systémem nároků na přístup; aktuální pozvánky jej nenahrazují.
+
+## Předání z Moje ITfit
+
+Vedle pozvánek z `invitations.config.json` přijímá API i podepsaný odkaz, který
+členovi vygeneruje WordPress plugin Moje ITfit (karta „Pokračuj ve svém deníku“).
+Odkaz má tvar `https://moje.itfit.cz/#pozvanka=i1.<data>.<podpis>`. Data nesou
+jen křestní jméno, připravený milník, platnost (24 hodin) a stálý anonymní
+identifikátor člena; e-mail ani číslo účtu WordPressu neobsahují. Podpis je
+HMAC-SHA256 společným klíčem, který má plugin v nastavení a Worker v tajné
+proměnné `ITFIT_HANDOFF_SECRET`. Bez ní, nebo s jiným klíčem, se odkaz odmítne.
+
+Dál platí vše výše: člověk si založí vlastní účet nebo se přihlásí, vložení
+milníku výslovně potvrdí a jeden člen Moje ITfit patří nejvýše jednomu účtu
+deníku (`invitation_claims`, ID `itfit-<identifikátor>`). Historie tréninků se
+nepřenáší a oba systémy zůstávají oddělené. Test: `node --test tests/handoff.test.mjs`.
