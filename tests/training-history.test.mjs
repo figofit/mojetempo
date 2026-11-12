@@ -49,8 +49,8 @@ test('cooperation reconstruction validates coverage, source, certainty and sum w
 
 test('the opening overview shows real current and previous weeks, monthly counts and historical totals',()=>{
  const state=fixture();state.entries.push(entry({id:'friday',type:'strength',date:'2026-11-06'}),entry({id:'cardio-a',type:'boxing',date:'2026-11-02',datePrecision:'week'}),entry({id:'cardio-b',type:'tennis',date:'2026-11-02',datePrecision:'week'}));
- const before=structuredClone(state),html=renderOverviewPulse(state,today);assert.ok(html.includes('100 %'));assert.ok(html.includes('Síla 3/3 · kardio 2/2'));assert.ok(html.includes('Před začátkem nových zápisů'));assert.ok(html.includes('<strong>12</strong>'));assert.ok(html.includes('3<small> silové</small> · 2<small> kardio</small>'));
- const next=renderOverviewPulse(state,'2026-11-11');assert.ok(next.includes('0 %'));assert.ok(next.includes('100 %'));assert.deepEqual(state,before);
+ const before=structuredClone(state),html=renderOverviewPulse(state,today);assert.ok(!html.includes(' %'));assert.ok(html.includes('3<small> silové</small> · 2<small> kardio</small>'));assert.ok(html.includes('Celý ideální týden ✓'));assert.ok(html.includes('Před začátkem nových zápisů'));assert.ok(html.includes('<strong>12</strong>'));assert.ok(html.includes('3<small> silové</small> · 2<small> kardio</small>'));
+ const next=renderOverviewPulse(state,'2026-11-11');assert.ok(!next.includes(' %'));assert.ok(next.includes('0<small> silové</small> · 0<small> kardio</small>'));assert.ok(next.includes('Celý ideální týden ✓'));assert.deepEqual(state,before);
 });
 
 test('historical metadata validates the complete annual sum and preserves edits without creating diary records',()=>{

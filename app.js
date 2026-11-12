@@ -777,7 +777,7 @@ async function action(name,element) {
     try{
       await persist(current=>answerTraining(current,element.dataset.slotId,element.dataset.slotDate,element.dataset.answer));
       const slot=trainingRoutineWeek(state,element.dataset.slotDate).slots.find(s=>s.id===element.dataset.slotId);
-      render();notify(element.dataset.answer==='yes'?`Splněno. ${slot.jointOrdinal?`Společný trénink #${slot.jointOrdinal}`:`Trénink #${slot.ordinal}`} je zapsaný.`:element.dataset.answer==='no'?'Vynechání je uložené. Počet tréninků se nezvyšuje.':'Odpověď je zrušená.');
+      render();notify(element.dataset.answer==='yes'?`Splněno. ${slot.jointOrdinal?`Společný trénink #${slot.jointOrdinal}`:`Trénink #${slot.ordinal}`} je zapsaný.`:element.dataset.answer==='no'?(originalOlda?'Zapsáno: tentokrát ne. Nic se tím nekazí.':'Vynechání je uložené. Počet tréninků se nezvyšuje.'):'Odpověď je zrušená.');
     }finally{routineSaving=false;if(panel?.isConnected)render();}
     return;
   }

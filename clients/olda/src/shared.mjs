@@ -20,13 +20,13 @@ function askCard(week,cardio,ctx) {
   const lock=`<div class="olda-readnote">${ctx.icon('shield')}<span>${ctx.signedIn?'Odpovídáte spolu. Zápis odemkneš tlačítkem <b>Jen čtení</b> nahoře.':'Odpovídáte spolu s Michalem. Pro zápis se přihlas tlačítkem nahoře.'}</span></div>`;
   if(pending.length) {
     const slot=pending[0];
-    const buttons=`<div class="olda-answer"><button class="button primary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="yes">${ctx.icon('check')}Ano, byl</button><button class="button secondary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="no">Ne</button></div><p class="olda-hint">„Ano“ přičte jeden skutečný trénink. „Ne“ se nepočítá a nic se nedomýšlí.</p>`;
+    const buttons=`<div class="olda-answer"><button class="button primary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="yes">${ctx.icon('check')}Ano, byl</button><button class="button secondary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="no">Tentokrát ne</button></div><p class="olda-hint">„Ano“ přičte jeden trénink. „Tentokrát ne“ nic nekazí, jen se nezapíše.</p>`;
     return `<section class="olda-ask"><p class="eyebrow">ČEKÁ NA POTVRZENÍ${pending.length>1?' · '+pending.length:''}</p><h2>Byl jsi ${DAY_IN[slot.weekday]} na tréninku?</h2><p class="olda-ask-sub">${esc(slot.label)} · ${stamp(slot.date)}</p>${ctx.canWrite?buttons:lock}</section>`;
   }
   const next=week.slots.find(slot=>slot.status==='pending'&&slot.future);
   const cardioLeft=cardio.config?Math.max(0,cardio.config.target-cardio.completed):0;
   const title=next?`Další na řadě: ${DAY_NAME[next.weekday]}, ${esc(next.label)}.`:week.total?'Silový týden je hotový.':'Týden bez pevného plánu.';
-  return `<section class="olda-ask is-calm"><p class="eyebrow">VŠECHNO ZAPSANÉ</p><h2>${title}</h2>${cardio.config?`<p class="olda-ask-sub">Kardio ${cardio.completed} z ${cardio.config.target}${cardioLeft?'. Chybějící kardio zapíšeš níže.':'. Splněno.'}</p>`:''}</section>`;
+  return `<section class="olda-ask is-calm"><p class="eyebrow">VŠECHNO ZAPSANÉ</p><h2>${title}</h2>${cardio.config?`<p class="olda-ask-sub">Kardio tento týden: ${cardio.completed}×${cardioLeft?'. Další zapíšeš níže.':'.'}</p>`:''}</section>`;
 }
 
 function weekStrip(week,cardio,today) {
@@ -34,7 +34,7 @@ function weekStrip(week,cardio,today) {
   return `<div class="olda-strip">${week.dates.map((date,index)=>{
     const slot=week.slots.find(item=>item.date===date);
     let pip='<span class="olda-pip is-empty"></span>';
-    if(slot)pip=`<span class="olda-pip ${slot.status==='done'?'is-yes':slot.status==='missed'?'is-no':'is-plan'}" aria-label="${slot.status==='done'?'splněno':slot.status==='missed'?'vynecháno':'naplánováno'}">${slot.status==='done'?'✓':slot.status==='missed'?'×':''}</span>`;
+    if(slot)pip=`<span class="olda-pip ${slot.status==='done'?'is-yes':slot.status==='missed'?'is-no':'is-plan'}" aria-label="${slot.status==='done'?'splněno':slot.status==='missed'?'tentokrát ne':'naplánováno'}">${slot.status==='done'?'✓':''}</span>`;
     const heart=cardioDays.has(date)?'<span class="olda-pip is-cardio" aria-label="kardio">♥</span>':'';
     return `<div class="olda-day ${date===today?'is-today':''}"><span>${DAY_SHORT[index]}</span><b>${dayNumber(date)}</b>${pip}${heart}</div>`;
   }).join('')}</div>`;
@@ -43,7 +43,7 @@ function weekStrip(week,cardio,today) {
 function slotRows(week,ctx) {
   if(!week.slots.length)return '<p class="olda-hint">Silový rytmus zatím není nastavený. Najdeš ho ve Více → Tvůj plán.</p>';
   return `<div class="olda-slots">${week.slots.map(slot=>{
-    const state=slot.status==='done'?'<span class="olda-state is-yes">Splněno</span>':slot.status==='missed'?'<span class="olda-state is-no">Nebyl</span>':slot.future?'<span class="olda-state is-next">Naplánováno</span>':'<span class="olda-state">Čeká</span>';
+    const state=slot.status==='done'?'<span class="olda-state is-yes">Splněno</span>':slot.status==='missed'?'<span class="olda-state is-no">Tentokrát ne</span>':slot.future?'<span class="olda-state is-next">Naplánováno</span>':'<span class="olda-state">Čeká</span>';
     const reset=ctx.canWrite&&slot.status!=='pending'?`<button class="olda-link" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="reset">Změnit</button>`:'';
     return `<div class="olda-slot"><span class="olda-when">${DAY_SHORT[slot.weekday]} ${stamp(slot.date)}</span><span class="olda-what">${esc(slot.label)}<small>${slot.together?(/michal/i.test(slot.label)?'Společný trénink':'Spolu s Michalem'):'Síla'}${slot.jointOrdinal?' · společný #'+slot.jointOrdinal:''}</small></span>${state}${reset}</div>`;
   }).join('')}</div>`;
@@ -59,13 +59,14 @@ function cardioBlock(cardio,ctx) {
   const picker=ctx.canWrite&&active&&open&&choices.length?`<div class="olda-cardio-add"><label class="olda-select">Den<select id="cardio-date">${choices.map(date=>`<option value="${date}" ${date===ctx.today?'selected':''}>${DAY_SHORT[ctx.weekDates.indexOf(date)]} ${stamp(date)}${date===ctx.today?' · dnes':''}</option>`).join('')}</select></label><button class="button primary small" data-action="cardio-answer" data-cardio-index="${open.index}" data-cardio-week="${cardio.start}" data-cardio-complete="true">${ctx.icon('plus')}Zapsat kardio</button></div>`:'';
   const last=[...cardio.slots].reverse().find(slot=>slot.entry);
   const undo=ctx.canWrite&&active&&last?`<button class="olda-link" data-action="cardio-answer" data-cardio-index="${last.index}" data-cardio-week="${cardio.start}" data-cardio-complete="false">Zrušit poslední</button>`:'';
-  return `<div class="olda-cardio"><div class="olda-cardio-head"><span>${esc(cardio.config.label)} · cíl ${cardio.config.target}× týdně, kdykoliv</span>${undo}</div>${days?`<div class="olda-chips">${days}</div>`:''}${picker}</div>`;
+  return `<div class="olda-cardio"><div class="olda-cardio-head"><span>${esc(cardio.config.label)} · ideálně ${cardio.config.target}× týdně, kdykoliv</span>${undo}</div>${days?`<div class="olda-chips">${days}</div>`:''}${picker}</div>`;
 }
 
+const word=(n,one,few,many)=>n===1?one:n>=2&&n<=4?few:many;
 function meters(week,cardio,ctx) {
   const bar=(done,max,cls)=>`<div class="olda-bar ${cls}">${Array.from({length:Math.max(1,max)},(_,i)=>`<i class="${i<done?'is-full':''}"></i>`).join('')}</div>`;
-  const strength=`<div class="olda-meter"><div><span>Síla</span>${ctx.icon('dumbbell')}</div><strong>${week.completed}<small> / ${week.total}</small></strong>${bar(week.completed,week.total,'')}</div>`;
-  const heart=cardio.config?`<div class="olda-meter is-cardio"><div><span>Kardio</span>${ctx.icon('heart')}</div><strong>${Math.min(cardio.completed,99)}<small> / ${cardio.config.target}</small></strong>${bar(cardio.completed,cardio.config.target,'is-cardio')}</div>`:'';
+  const strength=`<div class="olda-meter"><div><span>Síla</span>${ctx.icon('dumbbell')}</div><strong>${week.completed}<small> ${word(week.completed,'trénink','tréninky','tréninků')}</small></strong>${bar(week.completed,week.total,'')}<small class="olda-ideal">ideálně ${week.total}× týdně</small></div>`;
+  const heart=cardio.config?`<div class="olda-meter is-cardio"><div><span>Kardio</span>${ctx.icon('heart')}</div><strong>${Math.min(cardio.completed,99)}<small>×</small></strong>${bar(cardio.completed,cardio.config.target,'is-cardio')}<small class="olda-ideal">ideálně ${cardio.config.target}× týdně</small></div>`:'';
   return `<div class="olda-meters">${strength}${heart}</div>`;
 }
 
