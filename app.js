@@ -656,8 +656,13 @@ function renderAccountStatus() {
   if(originalOlda){document.body.classList.toggle('olda-reader',account.readOnly);if(account.readOnly)document.body.classList.remove('olda-editing');$('#settings-nav').classList.toggle('hidden',account.readOnly);}
   $('#account-profile').dataset.signedIn=account.diary?'true':'false';
   $('#account-profile').textContent=account.user?account.user.login:originalOlda?'Osobní nástěnka':'Osobní deník · v tomto prohlížeči';
-  $('#account-status').innerHTML=account.user?`<div class="account-status"><span>${icon('shield')}<strong>${esc(account.status)}</strong></span><button class="button ghost small" data-action="sync-account">Synchronizovat</button></div>`:'';
-  if(originalOlda&&account.readOnly)$('#account-status').innerHTML=`<div class="account-status"><span>${icon('eye')}<strong>${esc(account.status)}</strong></span><button class="button ghost small" data-action="sync-account">Obnovit přehled</button></div>`;
+  // Syncing runs by itself (after every change, every 30 s, on focus and when back online).
+  // The bar only speaks up when something needs attention; a manual retry appears only after a failure.
+  const quiet=['Uloženo v účtu','Aktuální přehled','Načítám přehled…','Synchronizuji…','Čeká na odeslání','Čeká na synchronizaci','Místní deník'].includes(account.status);
+  const offline=/^Offline/.test(account.status);
+  const retry=!quiet&&!offline?`<button class="button ghost small" data-action="sync-account">Zkusit znovu</button>`:'';
+  const showBar=account.user?!(originalOlda&&quiet):originalOlda&&account.readOnly&&!quiet;
+  $('#account-status').innerHTML=showBar?`<div class="account-status${quiet?' is-quiet':''}"><span>${icon(account.readOnly?'eye':'shield')}<strong>${esc(account.status)}</strong></span>${retry}</div>`:'';
   if(account.user)$('#account-status').insertAdjacentHTML('beforeend',`<div class="diary-context"><span>${account.scope==='olda'?'Oldův deník · '+(account.diary?.mode==='coach'?'společný zápis s Michalem':'osobní účet'):'Tvůj osobní deník'}</span>${!originalOlda&&account.diaries.some(d=>d.id==='olda'&&d.mode==='coach')?`<a class="button ghost small" href="${account.scope?'./':'?denik=olda'}">${account.scope?'Můj deník':'Oldův deník'}</a>`:''}<button class="button ghost small" data-action="logout-account">Odhlásit</button></div>`);
   if(account.user&&recoveryAvailable)$('#account-status').insertAdjacentHTML('beforeend','<details class="diary-context"><summary>Místní záloha před obnovou</summary><button class="button ghost small" data-action="download-local-drafts">Stáhnout původní návrhy</button></details>');
 }

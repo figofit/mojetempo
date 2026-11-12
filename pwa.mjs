@@ -10,10 +10,27 @@ function updateConnectionStatus() {
   target.innerHTML = navigator.onLine ? '' : '<div class="demo-banner connection-banner"><span>Jsi bez připojení. Deník i uložené fotky můžeš používat dál v tomto prohlížeči.</span></div>';
 }
 
+const openedAt = Date.now();
+let registrationRef;
+
+// New versions install themselves: right after opening, or quietly while the app is in the background.
+// Only someone in the middle of a form sees a note, so nothing they typed is lost by a reload.
 function showUpdate(worker) {
   waitingWorker = worker;
+  if (!hasUnsavedForm() && (document.hidden || Date.now() - openedAt < 15000)) {
+    applyUpdate();
+    return;
+  }
+  if (!hasUnsavedForm()) return;
   const target = document.querySelector('#pwa-update');
-  if (target) target.innerHTML = '<div class="demo-banner update-banner"><span><strong>Nová verze je připravená.</strong> Tvoje uložené záznamy zůstanou zachované.</span><button class="button secondary small" data-action="update-app">Aktualizovat</button></div>';
+  if (target) target.innerHTML = '<div class="demo-banner update-banner"><span><strong>Nová verze je připravená.</strong> Načte se sama, až aplikaci příště otevřeš.</span><button class="button secondary small" data-action="update-app">Načíst hned</button></div>';
+}
+
+function applyUpdate() {
+  if (!waitingWorker || hasUnsavedForm()) return false;
+  updateAccepted = true;
+  waitingWorker.postMessage({type:'SKIP_WAITING'});
+  return true;
 }
 
 function hasUnsavedForm() {
@@ -30,8 +47,7 @@ export function acceptUpdate() {
     report('Nejdřív ulož nebo zavři rozepsaný formulář. Pak můžeš aktualizovat aplikaci.');
     return;
   }
-  updateAccepted = true;
-  waitingWorker.postMessage({type:'SKIP_WAITING'});
+  applyUpdate();
 }
 
 export async function requestInstall() {
@@ -68,7 +84,13 @@ export async function initializePWA({notify} = {}) {
   });
   try {
     const registration = await navigator.serviceWorker.register('./service-worker.js', {scope:'./',updateViaCache:'none'});
+    registrationRef = registration;
     if (registration.waiting) showUpdate(registration.waiting);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) applyUpdate();
+      else registrationRef?.update().catch(() => {});
+    });
+    setInterval(() => { if (!document.hidden && navigator.onLine) registrationRef?.update().catch(() => {}); }, 30 * 60 * 1000);
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
       worker?.addEventListener('statechange', () => {
