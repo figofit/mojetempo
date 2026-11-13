@@ -1,7 +1,8 @@
 // Shared, optional details used by both the personal Olda app and Moje IT FIT.
 import {normalizeTrainingHistory} from './history-model.mjs';
+import {programSettings} from './program.mjs';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null,trainingRoutine:[],trainingSkips:[],jointTrainingAnchor:null,weeklyCardio:null,trainingHistory:null});
+export const PERSONAL_DEFAULTS=Object.freeze({customHabits:[],personalFields:[],personalPlan:{title:'',focus:'',notes:'',exercises:[]},personalProfile:null,trainingRoutine:[],trainingSkips:[],jointTrainingAnchor:null,weeklyCardio:null,trainingHistory:null,trainingProgram:null});
 const text=(value,max)=>typeof value==='string'&&value.length<=max;
 export function personalSettings(input={}) {
   const output={};
@@ -32,6 +33,7 @@ export function personalSettings(input={}) {
   if(anchor!==null&&(!anchor||typeof anchor.entryId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9:_-]{0,179}$/.test(anchor.entryId)||!Number.isSafeInteger(anchor.number)||anchor.number<1||anchor.number>1000000))throw new Error('Společné pořadí potřebuje skutečný trénink a kladné celé číslo.');
   output.jointTrainingAnchor=anchor?{entryId:anchor.entryId,number:anchor.number}:null;
   output.trainingHistory=normalizeTrainingHistory(input.trainingHistory);
+  output.trainingProgram=programSettings(input.trainingProgram??null);
   if(output.trainingHistory&&anchor&&output.trainingHistory.total!==anchor.number)throw new Error('Historický celek musí souhlasit s potvrzeným společným pořadím.');
   const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='1900-01-01'&&Number.isFinite(Date.parse(value+'T12:00:00Z'))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;
   const routineId=value=>typeof value==='string'&&/^routine-[A-Za-z0-9-]{1,60}$/.test(value);

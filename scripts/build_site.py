@@ -31,6 +31,7 @@ PUBLIC_FILES = (
     "history-model.mjs",
     "history-stats.mjs",
     "history-dashboard.mjs",
+    "program.mjs",
     "storage.mjs",
     "local-storage.mjs",
     "sync-rules.mjs",
