@@ -45,6 +45,22 @@ export function wranglerFailure(result,environment=process.env) {
   return new Error(`Odeslání do Pages selhalo (exit ${result.status??'unknown'}): ${redact(detail,environment)}`);
 }
 
+/** Cloudflare's own API sometimes answers 5xx or drops the connection; those uploads are safe to repeat. */
+export function transientWranglerFailure(result) {
+  const output=`${result?.stderr||''}\n${result?.stdout||''}`;
+  return result?.status!==0&&/-> 5\d\d |malformed response from the API|upstream connect error|ECONNRESET|ETIMEDOUT|fetch failed/i.test(output);
+}
+export async function runWrangler(args,options,{execute=spawnSync,attempts=3,delay=ms=>new Promise(resolve=>setTimeout(resolve,ms)),report=console.log}={}) {
+  let result;
+  for(let attempt=1;attempt<=attempts;attempt++) {
+    result=execute(process.execPath,args,options);
+    if(result.status===0||!transientWranglerFailure(result)||attempt===attempts)return result;
+    report(`[Moje tempo] Cloudflare API dočasně nedostupné, zkouším znovu (${attempt+1}/${attempts}).`);
+    await delay(15000*attempt);
+  }
+  return result;
+}
+
 export function cloudflareAPI(accountId,token,fetcher=fetch) {
   return async function call(path,method='GET',data) {
     const response=await fetcher(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)}),signal:AbortSignal.timeout(30000)});
@@ -94,7 +110,7 @@ export async function deployOriginalOlda({api,database,accountId,token}) {
     await buildOlda({output:publicDir});
     await writeFile(join(directory,'wrangler.toml'),`name = "olda-itfit"\npages_build_output_dir = "./public"\ncompatibility_date = "2026-10-29"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${DATABASE}"\ndatabase_id = "${database.uuid}"\n`);
     const environment={...process.env,CLOUDFLARE_ACCOUNT_ID:accountId,CLOUDFLARE_API_TOKEN:token,WRANGLER_SEND_METRICS:'false'};
-    const result=spawnSync(process.execPath,[join(ROOT,'node_modules/wrangler/bin/wrangler.js'),'pages','deploy',publicDir,'--project-name','olda-itfit','--branch','main','--force'],{cwd:directory,encoding:'utf8',maxBuffer:8*1024*1024,env:environment});
+    const result=await runWrangler([join(ROOT,'node_modules/wrangler/bin/wrangler.js'),'pages','deploy',publicDir,'--project-name','olda-itfit','--branch','main','--force'],{cwd:directory,encoding:'utf8',maxBuffer:8*1024*1024,env:environment});
     if(result.stdout)process.stdout.write(hideSecrets(result.stdout,environment));
     if(result.stderr)process.stderr.write(hideSecrets(result.stderr,environment));
     if(result.status!==0)throw wranglerFailure(result,environment);
@@ -113,7 +129,7 @@ export async function deployPages({accountId,token}) {
     console.log('[Moje tempo] Krok: odeslání aplikace do Pages');
     // Pages discovers wrangler.toml from cwd and rejects the global --config flag.
     const environment={...process.env,CLOUDFLARE_ACCOUNT_ID:accountId,CLOUDFLARE_API_TOKEN:token,WRANGLER_SEND_METRICS:'false'};
-    const result=spawnSync(process.execPath,[cli,'pages','deploy',stage.publicDir,'--project-name',PROJECT,'--branch','main','--force'],{cwd:stage.directory,encoding:'utf8',maxBuffer:8*1024*1024,env:environment});
+    const result=await runWrangler([cli,'pages','deploy',stage.publicDir,'--project-name',PROJECT,'--branch','main','--force'],{cwd:stage.directory,encoding:'utf8',maxBuffer:8*1024*1024,env:environment});
     // Keep the original CLI error in the final diagnostic, not just "custom build failed".
     if(result.stdout)process.stdout.write(hideSecrets(result.stdout,environment));
     if(result.stderr)process.stderr.write(hideSecrets(result.stderr,environment));
