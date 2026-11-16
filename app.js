@@ -361,7 +361,7 @@ function render() {
     const mode=document.querySelector('.olda-mode');
     if(mode){mode.classList.toggle('is-on',canWrite);mode.setAttribute('aria-pressed',String(canWrite));mode.querySelector('.olda-mode-label').textContent=canWrite?'Zapisujeme spolu':signedIn?'Jen čtení':'Přihlásit k zápisu';}
   }
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?{week:trainingRoutineWeek(state,routineReference),cardio:cardioWeek(state,routineReference),pulse:renderOverviewPulse(state),today:localDate(),signedIn,canWrite,icon}:{}):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?{week:trainingRoutineWeek(state,routineReference),previous:trainingRoutineWeek(state,new Date(new Date(routineReference).setDate(new Date(routineReference).getDate()-7))),cardio:cardioWeek(state,routineReference),pulse:renderOverviewPulse(state),today:localDate(),signedIn,canWrite,icon}:{}):renderers[currentView]();
   if(originalOlda)flattenOldaDetails($('#view-content'));
   if(allowed&&(currentView==='stats'&&!(originalOlda&&state.settings.trainingHistory)||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings,{coached:coachingEnabled()}));

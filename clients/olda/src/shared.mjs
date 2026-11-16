@@ -16,12 +16,13 @@ const stamp=date=>`${dayNumber(date)}. ${Number(date.slice(5,7))}.`;
 const editing=()=>document.body.classList.contains('olda-editing');
 
 function askCard(week,cardio,ctx) {
-  const pending=week.slots.filter(slot=>slot.status==='pending'&&!slot.future);
+  // Unanswered sessions from last week come first, so a missed Monday check-in is never lost.
+  const pending=[...(ctx.previous?.slots||[]),...week.slots].filter(slot=>slot.status==='pending'&&!slot.future);
   const lock=`<div class="olda-readnote">${ctx.icon('shield')}<span>${ctx.signedIn?'Odpovídáte spolu. Zápis odemkneš tlačítkem <b>Jen čtení</b> nahoře.':'Odpovídáte spolu s Michalem. Pro zápis se přihlas tlačítkem nahoře.'}</span></div>`;
   if(pending.length) {
     const slot=pending[0];
     const buttons=`<div class="olda-answer"><button class="button primary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="yes">${ctx.icon('check')}Ano, byl</button><button class="button secondary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="no">Tentokrát ne</button></div><p class="olda-hint">„Ano“ přičte jeden trénink. „Tentokrát ne“ nic nekazí, jen se nezapíše.</p>`;
-    return `<section class="olda-ask"><p class="eyebrow">ČEKÁ NA POTVRZENÍ${pending.length>1?' · '+pending.length:''}</p><h2>Byl jsi ${DAY_IN[slot.weekday]} na tréninku?</h2><p class="olda-ask-sub">${esc(slot.label)} · ${stamp(slot.date)}</p>${ctx.canWrite?buttons:lock}</section>`;
+    return `<section class="olda-ask"><p class="eyebrow">ČEKÁ NA POTVRZENÍ${pending.length>1?' · '+pending.length:''}</p><h2>Byl jsi ${week.dates.includes(slot.date)?'':'minulý týden '}${DAY_IN[slot.weekday]} na tréninku?</h2><p class="olda-ask-sub">${esc(slot.label)} · ${stamp(slot.date)}</p>${ctx.canWrite?buttons:lock}</section>`;
   }
   const next=week.slots.find(slot=>slot.status==='pending'&&slot.future);
   const cardioLeft=cardio.config?Math.max(0,cardio.config.target-cardio.completed):0;
@@ -44,7 +45,9 @@ function slotRows(week,ctx) {
   if(!week.slots.length)return '<p class="olda-hint">Silový rytmus zatím není nastavený. Najdeš ho ve Více → Tvůj plán.</p>';
   return `<div class="olda-slots">${week.slots.map(slot=>{
     const state=slot.status==='done'?'<span class="olda-state is-yes">Splněno</span>':slot.status==='missed'?'<span class="olda-state is-no">Tentokrát ne</span>':slot.future?'<span class="olda-state is-next">Naplánováno</span>':'<span class="olda-state">Čeká</span>';
-    const reset=ctx.canWrite&&slot.status!=='pending'?`<button class="olda-link" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="reset">Změnit</button>`:'';
+    const reset=ctx.canWrite&&slot.status!=='pending'?`<button class="olda-link" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="reset">Změnit</button>`
+      // Past sessions can be answered right in the row, also when browsing earlier weeks.
+      :ctx.canWrite&&!slot.future?`<span class="olda-row-answer"><button class="olda-link is-yes" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="yes">Ano</button><button class="olda-link" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="no">Ne</button></span>`:'';
     return `<div class="olda-slot"><span class="olda-when">${DAY_SHORT[slot.weekday]} ${stamp(slot.date)}</span><span class="olda-what">${esc(slot.label)}<small>${slot.together?(/michal/i.test(slot.label)?'Společný trénink':'Spolu s Michalem'):'Síla'}${slot.jointOrdinal?' · společný #'+slot.jointOrdinal:''}</small></span>${state}${reset}</div>`;
   }).join('')}</div>`;
 }

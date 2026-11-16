@@ -159,3 +159,9 @@ details.olda-open>summary::-webkit-details-marker{display:none}
   .olda-ask{padding:18px}
   .olda-card{padding:16px}
 }
+
+/* Answer past sessions right in the row. */
+.olda-row-answer{display:flex;gap:12px}
+.olda-row-answer .olda-link{padding:4px 6px}
+.olda-row-answer .olda-link:not(.is-yes){color:var(--muted,#9aa395)}
+@media(max-width:900px){.olda-slot .olda-row-answer{grid-column:2/-1;justify-self:start}.olda-slot .olda-row-answer .olda-link{padding:2px 0}}
