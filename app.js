@@ -11,7 +11,7 @@ import { showMap, destroyMap, searchPlaces } from './places.mjs';
 import { emptyDiary, same } from './sync-rules.mjs';
 import {personalSettings,renderPersonalPlan,renderPersonalFields,personalPlanRow} from './personal.mjs';
 import {EQUIPMENT,programById,programDays,chooseProgram,swapProgramExercise,renderProgramChooser,renderProgram,renderSwapPicker} from './program.mjs';
-import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio,advanceRoutineReference,cardioWeek} from './training-routine.mjs';
+import {renderTrainingRoutine,answerTraining,trainingRoutineWeek,renderCardioRoutine,answerCardio,answerCardioSlot,advanceRoutineReference,cardioWeek} from './training-routine.mjs';
 import {renderHistoryTeaser,renderHistoryDashboard,renderConsistencyDashboard,renderOverviewPulse} from './history-dashboard.mjs';
 import {normalizeTrainingHistory} from './history-model.mjs';
 
@@ -361,7 +361,7 @@ function render() {
     const mode=document.querySelector('.olda-mode');
     if(mode){mode.classList.toggle('is-on',canWrite);mode.setAttribute('aria-pressed',String(canWrite));mode.querySelector('.olda-mode-label').textContent=canWrite?'Zapisujeme spolu':signedIn?'Jen čtení':'Přihlásit k zápisu';}
   }
-  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?{week:trainingRoutineWeek(state,routineReference),previous:trainingRoutineWeek(state,new Date(new Date(routineReference).setDate(new Date(routineReference).getDate()-7))),cardio:cardioWeek(state,routineReference),pulse:renderOverviewPulse(state),today:localDate(),signedIn,canWrite,icon}:{}):renderers[currentView]();
+  $('#view-content').innerHTML=originalOlda&&(!allowed||currentView==='overview')?originalOlda.overview(allowed?state:emptyDiary(),getAccount(),allowed?{week:trainingRoutineWeek(state,routineReference),previous:trainingRoutineWeek(state,new Date(new Date(routineReference).setDate(new Date(routineReference).getDate()-7))),cardio:cardioWeek(state,routineReference),previousCardio:cardioWeek(state,new Date(new Date(routineReference).setDate(new Date(routineReference).getDate()-7))),pulse:renderOverviewPulse(state),today:localDate(),signedIn,canWrite,icon}:{}):renderers[currentView]();
   if(originalOlda)flattenOldaDetails($('#view-content'));
   if(allowed&&(currentView==='stats'&&!(originalOlda&&state.settings.trainingHistory)||currentView==='overview'&&!originalOlda))$('#view-content .page-heading, #view-content .today-panel')?.insertAdjacentHTML('afterend',renderTrainingSummary());
   if(currentView==='modules'&&allowed)$('#view-content').insertAdjacentHTML('beforeend',renderHabitJournal(state.settings,habitJournalDate)+renderPersonalFields(state.settings,{coached:coachingEnabled()}));
@@ -814,6 +814,18 @@ async function action(name,element) {
     if(name==='routine-today')routineReference=new Date();
     else {routineReference=new Date(routineReference);routineReference.setDate(routineReference.getDate()+(name==='routine-prev'?-7:7));}
     render();return;
+  }
+  if(originalOlda&&name==='cardio-slot'){
+    if(routineSaving)return;
+    routineSaving=true;
+    const answer=element.dataset.answer,date=element.closest('[data-cardio-row]')?.querySelector('select')?.value||'';
+    element.closest('section')?.querySelectorAll('[data-action="cardio-slot"]').forEach(button=>button.disabled=true);
+    try{
+      await persist(current=>answerCardioSlot(current,element.dataset.cardioWeek,Number(element.dataset.cardioIndex),answer,date));
+      notify(answer==='yes'?'Kardio je zapsané.':answer==='no'?'Zapsáno: tentokrát ne. Nic se tím nekazí.':'Můžeš odpovědět znovu.');
+    }catch(error){notify(error.message,true);}
+    finally{routineSaving=false;render();}
+    return;
   }
   if(originalOlda&&name==='cardio-answer'){
     if(routineSaving)return;

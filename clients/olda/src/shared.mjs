@@ -24,6 +24,12 @@ function askCard(week,cardio,ctx) {
     const buttons=`<div class="olda-answer"><button class="button primary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="yes">${ctx.icon('check')}Ano, byl</button><button class="button secondary" data-action="routine-answer" data-slot-id="${esc(slot.id)}" data-slot-date="${slot.date}" data-answer="no">Tentokrát ne</button></div><p class="olda-hint">„Ano“ přičte jeden trénink. „Tentokrát ne“ nic nekazí, jen se nezapíše.</p>`;
     return `<section class="olda-ask"><p class="eyebrow">ČEKÁ NA POTVRZENÍ${pending.length>1?' · '+pending.length:''}</p><h2>Byl jsi ${week.dates.includes(slot.date)?'':'minulý týden '}${DAY_IN[slot.weekday]} na tréninku?</h2><p class="olda-ask-sub">${esc(slot.label)} · ${stamp(slot.date)}</p>${ctx.canWrite?buttons:lock}</section>`;
   }
+  const prevCardio=ctx.previousCardio,cardioPending=prevCardio?.config?prevCardio.slots.filter(slot=>slot.status==='pending'):[];
+  if(cardioPending.length) {
+    const slot=cardioPending[0];
+    const buttons=`<div class="olda-answer" data-cardio-row>${cardioDaySelect(prevCardio,ctx.today,'')}<button class="button primary" data-action="cardio-slot" data-cardio-index="${slot.index}" data-cardio-week="${prevCardio.start}" data-answer="yes">${ctx.icon('check')}Ano, bylo</button><button class="button secondary" data-action="cardio-slot" data-cardio-index="${slot.index}" data-cardio-week="${prevCardio.start}" data-answer="no">Tentokrát ne</button></div><p class="olda-hint">Vyber den, kdy kardio bylo. „Tentokrát ne“ nic nekazí.</p>`;
+    return `<section class="olda-ask"><p class="eyebrow">ČEKÁ NA POTVRZENÍ${cardioPending.length>1?' · '+cardioPending.length:''}</p><h2>Byl jsi minulý týden na ${slot.index+1}. kardiu?</h2><p class="olda-ask-sub">${esc(prevCardio.config.label)} · ${stamp(prevCardio.start)} – ${stamp(prevCardio.end)} · ${slot.index+1}. z ${prevCardio.config.target}</p>${ctx.canWrite?buttons:lock}</section>`;
+  }
   const next=week.slots.find(slot=>slot.status==='pending'&&slot.future);
   const cardioLeft=cardio.config?Math.max(0,cardio.config.target-cardio.completed):0;
   const title=next?`Další na řadě: ${DAY_NAME[next.weekday]}, ${esc(next.label)}.`:week.total?'Silový týden je hotový.':'Týden bez pevného plánu.';
@@ -52,17 +58,29 @@ function slotRows(week,ctx) {
   }).join('')}</div>`;
 }
 
+function cardioDaySelect(cardio,today,selected) {
+  const days=[];
+  for(let i=0;i<7;i++){const d=new Date(cardio.start+'T12:00:00');d.setDate(d.getDate()+i);const date=d.toISOString().slice(0,10);if(date<=today&&date>=cardio.config.since)days.push([i,date]);}
+  const pick=selected||days.at(-1)?.[1];
+  return `<label class="olda-select olda-cardio-day">Den<select aria-label="Den kardia">${days.map(([i,date])=>`<option value="${date}" ${date===pick?'selected':''}>${DAY_SHORT[i]} ${stamp(date)}${date===today?' · dnes':''}</option>`).join('')}</select></label>`;
+}
+
 function cardioBlock(cardio,ctx) {
   if(!cardio.config)return '';
-  const active=cardio.end>=cardio.config.since&&cardio.start<=ctx.today&&cardio.config.since<=ctx.today;
-  const open=cardio.slots.find(slot=>!slot.entry);
-  const days=cardio.records.map(entry=>`<span class="olda-chip">${DAY_SHORT[(new Date(entry.date+'T12:00:00').getDay()+6)%7]} ${stamp(entry.date)}</span>`).join('');
-  const choices=[];
-  for(const date of ctx.weekDates)if(date<=ctx.today&&date>=cardio.config.since)choices.push(date);
-  const picker=ctx.canWrite&&active&&open&&choices.length?`<div class="olda-cardio-add"><label class="olda-select">Den<select id="cardio-date">${choices.map(date=>`<option value="${date}" ${date===ctx.today?'selected':''}>${DAY_SHORT[ctx.weekDates.indexOf(date)]} ${stamp(date)}${date===ctx.today?' · dnes':''}</option>`).join('')}</select></label><button class="button primary small" data-action="cardio-answer" data-cardio-index="${open.index}" data-cardio-week="${cardio.start}" data-cardio-complete="true">${ctx.icon('plus')}Zapsat kardio</button></div>`:'';
-  const last=[...cardio.slots].reverse().find(slot=>slot.entry);
-  const undo=ctx.canWrite&&active&&last?`<button class="olda-link" data-action="cardio-answer" data-cardio-index="${last.index}" data-cardio-week="${cardio.start}" data-cardio-complete="false">Zrušit poslední</button>`:'';
-  return `<div class="olda-cardio"><div class="olda-cardio-head"><span>${esc(cardio.config.label)} · ideálně ${cardio.config.target}× týdně, kdykoliv</span>${undo}</div>${days?`<div class="olda-chips">${days}</div>`:''}${picker}</div>`;
+  const dayOf=date=>DAY_SHORT[(new Date(date+'T12:00:00').getDay()+6)%7];
+  const inSlots=new Set(cardio.slots.map(slot=>slot.entry?.id).filter(Boolean));
+  const extra=cardio.records.filter(entry=>!inSlots.has(entry.id)).map(entry=>`<span class="olda-chip">navíc · ${dayOf(entry.date)} ${stamp(entry.date)}</span>`).join('');
+  const action=(slot,answer,text,cls='')=>`<button class="olda-link ${cls}" data-action="cardio-slot" data-cardio-index="${slot.index}" data-cardio-week="${cardio.start}" data-answer="${answer}">${text}</button>`;
+  const rows=cardio.slots.map(slot=>{
+    const when=slot.entry?`${dayOf(slot.entry.date)} ${stamp(slot.entry.date)}`:`${slot.index+1}. kardio`;
+    const title=slot.entry?.title&&slot.entry.title!==cardio.config.label?slot.entry.title:cardio.config.label;
+    const state={done:'<span class="olda-state is-yes">Splněno</span>',missed:'<span class="olda-state is-no">Tentokrát ne</span>',pending:'<span class="olda-state">Čeká</span>',open:'<span class="olda-state is-next">Kdykoliv v týdnu</span>',untracked:'<span class="olda-state">—</span>'}[slot.status];
+    let tools='';
+    if(ctx.canWrite&&(slot.status==='done'||slot.status==='missed'))tools=action(slot,'reset','Změnit');
+    else if(ctx.canWrite&&(slot.status==='pending'||slot.status==='open'))tools=`<span class="olda-row-answer olda-cardio-answer" data-cardio-row>${cardioDaySelect(cardio,ctx.today,'')}${action(slot,'yes','Ano','is-yes')}${slot.status==='pending'?action(slot,'no','Ne'):''}</span>`;
+    return `<div class="olda-slot is-cardio"><span class="olda-when">${when}</span><span class="olda-what">${esc(title)}<small>Kardio · kdykoliv v týdnu</small></span>${state}${tools}</div>`;
+  }).join('');
+  return `<div class="olda-cardio"><div class="olda-cardio-head"><span>${esc(cardio.config.label)} · ideálně ${cardio.config.target}× týdně, kdykoliv</span></div><div class="olda-slots">${rows}</div>${extra?`<div class="olda-chips">${extra}</div>`:''}</div>`;
 }
 
 const word=(n,one,few,many)=>n===1?one:n>=2&&n<=4?few:many;

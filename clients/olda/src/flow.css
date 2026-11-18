@@ -161,7 +161,10 @@ details.olda-open>summary::-webkit-details-marker{display:none}
 }
 
 /* Answer past sessions right in the row. */
-.olda-row-answer{display:flex;gap:12px}
+.olda-row-answer{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.olda-cardio-answer .olda-select{gap:0;font-size:0}
+.olda-cardio-answer select{min-height:34px;padding:4px 8px;font-size:13px}
+.olda-ask .olda-cardio-day{min-width:150px}
 .olda-row-answer .olda-link{padding:4px 6px}
 .olda-row-answer .olda-link:not(.is-yes){color:var(--muted,#9aa395)}
 @media(max-width:900px){.olda-slot .olda-row-answer{grid-column:2/-1;justify-self:start}.olda-slot .olda-row-answer .olda-link{padding:2px 0}}

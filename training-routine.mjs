@@ -46,14 +46,22 @@ export function answerTraining(state,slotId,date,answer,today=localDate()) {
 }
 
 const cardioId=(start,index)=>`cardio-${start}-${index+1}`;
+const cardioSkipId=(start,index)=>`${start}:routine-cardio-${index+1}`;
 export function cardioWeek(state,reference=new Date(),today=localDate()) {
   const {weeklyCardio:config}=personalSettings(state.settings),dates=planWeekDates(reference),start=dates[0],end=dates[6];
   if(!config)return {config:null,start,end,records:[],slots:[],completed:0};
   const records=state.entries.filter(e=>isCardio(e)&&e.date>=start&&e.date<=end&&e.date>=config.since&&validateEntry(e,today).valid).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const {trainingSkips}=personalSettings(state.settings);
   const slots=Array.from({length:config.target},(_,index)=>({index,id:cardioId(start,index),entry:records.find(e=>e.id===cardioId(start,index))}));
   const used=new Set(slots.filter(s=>s.entry).map(s=>s.entry.id)),remaining=records.filter(e=>!used.has(e.id));
   for(const slot of slots)if(!slot.entry)slot.entry=remaining.shift();
-  return {config,start,end,records,slots,completed:records.length};
+  // A slot is open while the week runs; once it is over it waits for an explicit yes or "not this time".
+  const tracked=end>=config.since&&start<=today&&config.since<=today;
+  for(const slot of slots){
+    const missed=trainingSkips.some(s=>s.id===cardioSkipId(start,slot.index));
+    slot.status=slot.entry?'done':missed?'missed':!tracked?'untracked':end<today?'pending':'open';
+  }
+  return {config,start,end,records,slots,completed:records.length,tracked,over:end<today};
 }
 
 /** Each weekly tick records one dated cardio activity in the common diary. */
@@ -74,6 +82,24 @@ export function answerCardio(state,reference,index,completed,date,today=localDat
     entries=entries.filter(e=>e.id!==slot.entry.id);
   }
   return {...state,entries,onboardingComplete:true};
+}
+
+/** Olda answers each weekly cardio like a strength session: yes (with a day), not this time, or change. */
+export function answerCardioSlot(state,reference,index,answer,date,today=localDate()) {
+  if(!['yes','no','reset'].includes(answer))throw new Error('Vyber Ano nebo Ne.');
+  const week=cardioWeek(state,reference,today),slot=week.slots[index];
+  if(!slot||!week.tracked)throw new Error('Vyber platné kardio v aktuálním nebo minulém týdnu.');
+  const {trainingSkips}=personalSettings(state.settings),skipId=cardioSkipId(week.start,index);
+  const withoutSkip=current=>({...current,settings:{...current.settings,trainingSkips:trainingSkips.filter(s=>s.id!==skipId)}});
+  if(answer==='yes')return answerCardio(withoutSkip(state),reference,index,true,date,today);
+  if(answer==='no'){
+    if(slot.entry)throw new Error('Toto kardio už je zapsané. Nejdřív ho změň.');
+    if(!week.over)throw new Error('„Tentokrát ne“ jde zapsat až po skončení týdne.');
+    const skips=[...trainingSkips.filter(s=>s.id!==skipId),{id:skipId,date:week.start,slotId:`routine-cardio-${index+1}`}].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id)).slice(-4000);
+    return {...state,settings:{...state.settings,trainingSkips:skips},onboardingComplete:true};
+  }
+  const cleared=withoutSkip(state);
+  return slot.entry?answerCardio(cleared,reference,index,false,'',today):{...cleared,onboardingComplete:true};
 }
 
 export function renderCardioRoutine(state,reference=new Date(),chosenDate='',today=localDate()) {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyDiary,mergeDiaries} from '../sync-rules.mjs';
 import {personalSettings} from '../personal.mjs';
-import {answerTraining,trainingRoutineWeek,renderTrainingRoutine} from '../training-routine.mjs';
+import {answerTraining,trainingRoutineWeek,renderTrainingRoutine,cardioWeek,answerCardioSlot} from '../training-routine.mjs';
 import {computeTrainingStats,validateEntry,jointTrainingHistory} from '../domain.mjs';
 
 const today='2026-11-06';
@@ -97,4 +97,20 @@ test('the joint anchor survives backup and independent device merges and rejects
   assert.deepEqual(mergeDiaries(base,local,remote).settings.jointTrainingAnchor,local.settings.jointTrainingAnchor);
   assert.deepEqual(personalSettings(JSON.parse(JSON.stringify(local.settings))).jointTrainingAnchor,local.settings.jointTrainingAnchor);
   for(const number of [0,-1,1.5,'47',1000001])assert.throws(()=>personalSettings({...local.settings,jointTrainingAnchor:{entryId:'known-workout',number}}));
+});
+
+test('weekly cardio is answered per slot like strength: yes with a day, not this time after the week, and change',()=>{
+  const state=emptyDiary();state.settings.weeklyCardio={target:2,label:'Kardio',since:'2026-11-02'};
+  const now='2026-11-11',last='2026-11-02';
+  assert.deepEqual(cardioWeek(state,last,now).slots.map(s=>s.status),['pending','pending']);
+  assert.deepEqual(cardioWeek(state,now,now).slots.map(s=>s.status),['open','open']);
+  assert.throws(()=>answerCardioSlot(state,now,0,'no','',now));
+  const yes=answerCardioSlot(state,last,0,'yes','2026-11-05',now);
+  assert.equal(yes.entries.length,1);assert.equal(yes.entries[0].date,'2026-11-05');
+  const no=answerCardioSlot(yes,last,1,'no','',now);
+  assert.deepEqual(cardioWeek(no,last,now).slots.map(s=>s.status),['done','missed']);
+  assert.doesNotThrow(()=>personalSettings(no.settings));
+  const reset=answerCardioSlot(answerCardioSlot(no,last,1,'reset','',now),last,0,'reset','',now);
+  assert.equal(reset.entries.length,0);assert.equal(reset.settings.trainingSkips.length,0);
+  assert.deepEqual(cardioWeek(reset,last,now).slots.map(s=>s.status),['pending','pending']);
 });
